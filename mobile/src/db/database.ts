@@ -1,0 +1,110 @@
+import { open, type DB, type Scalar } from '@op-engineering/op-sqlite';
+
+let db: DB | null = null;
+
+// Each entry upgrades the schema by one version. Append new migrations; never edit old ones.
+const MIGRATIONS: string[][] = [
+  [
+    `CREATE TABLE users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mobile TEXT NOT NULL UNIQUE,
+      full_name TEXT NOT NULL,
+      gender TEXT NOT NULL,
+      dob TEXT NOT NULL,
+      pin_salt TEXT NOT NULL,
+      pin_hash TEXT NOT NULL,
+      pin_iterations INTEGER NOT NULL,
+      photo_uri TEXT,
+      biometric_enabled INTEGER NOT NULL DEFAULT 0,
+      doctor_id INTEGER REFERENCES doctors(id),
+      created_at TEXT NOT NULL
+    )`,
+    `CREATE TABLE doctors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      full_name TEXT NOT NULL,
+      contact TEXT NOT NULL,
+      photo_uri TEXT,
+      start_month INTEGER NOT NULL,
+      start_year INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    )`,
+    `CREATE TABLE patient_exercises (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      exercise_id TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      reps INTEGER NOT NULL,
+      hold_seconds INTEGER NOT NULL
+    )`,
+    `CREATE TABLE reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      title TEXT NOT NULL,
+      report_date TEXT NOT NULL,
+      doctor_id INTEGER NOT NULL REFERENCES doctors(id),
+      file_uri TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      file_name TEXT,
+      created_at TEXT NOT NULL
+    )`,
+    // One row per day the patient exercised. No row = nothing done (red dot).
+    `CREATE TABLE exercise_days (
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      day TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('complete', 'partial')),
+      PRIMARY KEY (user_id, day)
+    )`,
+    `CREATE TABLE app_state (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    )`,
+  ],
+  // v2: remember whether the patient has seen the Counttill (exercise session) tour.
+  ['ALTER TABLE users ADD COLUMN counttill_tour_done INTEGER NOT NULL DEFAULT 0'],
+];
+
+function migrate(database: DB) {
+  const current = Number(database.executeSync('PRAGMA user_version').rows[0]?.user_version ?? 0);
+  for (let version = current; version < MIGRATIONS.length; version++) {
+    database.executeSync('BEGIN');
+    try {
+      for (const statement of MIGRATIONS[version]) {
+        database.executeSync(statement);
+      }
+      database.executeSync(`PRAGMA user_version = ${version + 1}`);
+      database.executeSync('COMMIT');
+    } catch (error) {
+      database.executeSync('ROLLBACK');
+      throw error;
+    }
+  }
+}
+
+export function getDb(): DB {
+  if (!db) {
+    db = open({ name: 'painflame.db' });
+    db.executeSync('PRAGMA foreign_keys = ON');
+    migrate(db);
+  }
+  return db;
+}
+
+export function query<T>(sql: string, params: Scalar[] = []): T[] {
+  return getDb().executeSync(sql, params).rows as T[];
+}
+
+export function run(sql: string, params: Scalar[] = []) {
+  return getDb().executeSync(sql, params);
+}
+
+export function transaction(work: () => void) {
+  const database = getDb();
+  database.executeSync('BEGIN');
+  try {
+    work();
+    database.executeSync('COMMIT');
+  } catch (error) {
+    database.executeSync('ROLLBACK');
+    throw error;
+  }
+}
