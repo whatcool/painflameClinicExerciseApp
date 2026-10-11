@@ -89,7 +89,16 @@ const useStyles = makeStyles(colors =>
     },
     subtitle: { fontSize: font.body, color: colors.textMuted, marginBottom: spacing.lg },
     error: { color: colors.danger, fontSize: font.body, marginBottom: spacing.md },
-    footer: { flexDirection: 'row', justifyContent: 'center', marginTop: spacing.lg, gap: spacing.sm },
+    // Wraps onto two lines on narrow phones instead of running off the screen.
+    footer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: spacing.lg,
+      columnGap: spacing.sm,
+      rowGap: spacing.xs,
+    },
     footerText: { fontSize: font.body, color: colors.textMuted },
     link: { fontSize: font.body, color: colors.primary, fontWeight: '700' },
   }),
