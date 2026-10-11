@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
@@ -20,10 +20,6 @@ function App() {
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
-    // <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-
-    //   <Text>App</Text>
-    // </View>
   );
 }
 

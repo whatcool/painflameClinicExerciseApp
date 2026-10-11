@@ -6,8 +6,7 @@ Physiotherapy exercise app for Painflame Clinic patients.
 painflameTherapies/
 ├── mobile/     React Native patient app (Android 11+, minSdk 30)
 ├── admin/      Clinic admin panel (React + Vite web app)
-├── supabase/   Database schema, security rules, Edge Functions, seed data
-└── backend/    Old Node/Express skeleton: no longer used (Supabase replaces it)
+└── supabase/   Database schema, security rules, Edge Functions, seed data
 ```
 
 **First-time setup of the server: see [SUPABASE_SETUP.md](SUPABASE_SETUP.md).**
