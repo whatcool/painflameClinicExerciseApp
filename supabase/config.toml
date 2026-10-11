@@ -1,0 +1,13 @@
+# Supabase CLI settings for deploying the Edge Functions.
+# JWT checks are done inside the functions (patient-login and activate-patient are
+# called before the patient is signed in; clinic-patients checks for the clinic role).
+project_id = "painflame"
+
+[functions.patient-login]
+verify_jwt = false
+
+[functions.activate-patient]
+verify_jwt = false
+
+[functions.clinic-patients]
+verify_jwt = false

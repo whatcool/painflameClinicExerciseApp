@@ -1,7 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Modal, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  Alert,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
 import { DashboardCarousel } from '../../components/DashboardCarousel';
 import { DoctorCard } from '../../components/DoctorCard';
@@ -10,7 +21,10 @@ import { Icon } from '../../components/Icon';
 import { Logo } from '../../components/Logo';
 import { StreakBadge } from '../../components/StreakBadge';
 import { useAuth, useCurrentUser } from '../../context/AuthContext';
-import { useTherapistGate } from '../../context/TherapistGate';
+import {
+  useClinicSession,
+  useTherapistGate,
+} from '../../context/TherapistGate';
 import { getDoctor, type Doctor } from '../../db/doctors';
 import { getExerciseList, type PatientExercise } from '../../db/exerciseList';
 import {
@@ -21,7 +35,7 @@ import {
   summariseMonth,
   type DotColor,
 } from '../../db/tracking';
-import { setDoctor } from '../../db/users';
+import { setPatientDoctor } from '../../services/api';
 import type { ScreenProps } from '../../navigation/types';
 import { font, radius, spacing } from '../../theme';
 import { makeStyles, useTheme } from '../../theme/ThemeContext';
@@ -43,8 +57,9 @@ export function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
   const styles = useStyles();
   const { colors, isDark, setDark } = useTheme();
   const user = useCurrentUser();
-  const { logout, refreshUser } = useAuth();
+  const { logout, refreshUser, sync } = useAuth();
   const requireTherapist = useTherapistGate();
+  const { clinic, setClinic, endClinic } = useClinicSession();
   const insets = useSafeAreaInsets();
   const [menuOpen, setMenuOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
@@ -58,30 +73,37 @@ export function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
     today: string;
   } | null>(null);
 
-  // Reload whenever the dashboard comes back into view (list edited, profile changed, ...).
+  // Whenever the dashboard comes back into view: re-read the cache, then fetch updates.
   useFocusEffect(
     useCallback(() => {
       refreshUser();
-      const now = new Date();
-      const today = toDayKey(now);
-      const year = now.getFullYear();
-      const monthIndex = now.getMonth();
-      setExercises(getExerciseList(user.id));
-      setStreak(currentStreak(getExercisedDays(user.id), today));
-      const { dots } = summariseMonth(
-        year,
-        monthIndex,
-        getMonthStatuses(user.id, year, monthIndex),
-        signupDayOf(user.createdAt),
-        today,
-      );
-      setMonth({ year, monthIndex, dots, today });
-    }, [refreshUser, user.id, user.createdAt]),
+      sync();
+    }, [refreshUser, sync]),
   );
 
+  // Recompute from the cache whenever the user data changes (after a sync or an edit).
   useEffect(() => {
+    const now = new Date();
+    const today = toDayKey(now);
+    const year = now.getFullYear();
+    const monthIndex = now.getMonth();
+    setExercises(getExerciseList(user.id));
+    setStreak(currentStreak(getExercisedDays(user.id), today));
+    const { dots } = summariseMonth(
+      year,
+      monthIndex,
+      getMonthStatuses(user.id, year, monthIndex),
+      signupDayOf(user.createdAt),
+      today,
+    );
+    setMonth({ year, monthIndex, dots, today });
     setDoctorState(user.doctorId !== null ? getDoctor(user.doctorId) : null);
-  }, [user, libraryOpen]);
+  }, [user]);
+
+  const closeLibrary = () => {
+    setLibraryOpen(false);
+    endClinic();
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -93,8 +115,14 @@ export function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
             accessibilityLabel="Open menu"
             onPress={() => setMenuOpen(true)}
             hitSlop={12}
-            style={styles.menuButton}>
-            <Icon name="menu" size={30} color={colors.primary} strokeWidth={2.5} />
+            style={styles.menuButton}
+          >
+            <Icon
+              name="menu"
+              size={30}
+              color={colors.primary}
+              strokeWidth={2.5}
+            />
           </Pressable>
         </View>
 
@@ -110,7 +138,12 @@ export function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
 
         <DoctorCard
           doctor={doctor}
-          onChange={() => requireTherapist(() => setLibraryOpen(true))}
+          onChange={() =>
+            requireTherapist(session => {
+              setClinic(session);
+              setLibraryOpen(true);
+            })
+          }
         />
 
         <Button
@@ -119,13 +152,18 @@ export function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
           style={styles.start}
           onPress={() => {
             if (exercises.length === 0) {
-              Alert.alert('No exercises yet', 'Add exercises to your list before starting.', [
-                { text: 'Not now', style: 'cancel' },
-                {
-                  text: 'Create list',
-                  onPress: () => navigation.navigate('ExerciseList', { edit: true }),
-                },
-              ]);
+              Alert.alert(
+                'No exercises yet',
+                'Add exercises to your list before starting.',
+                [
+                  { text: 'Not now', style: 'cancel' },
+                  {
+                    text: 'Create list',
+                    onPress: () =>
+                      navigation.navigate('ExerciseList', { edit: true }),
+                  },
+                ],
+              );
               return;
             }
             navigation.navigate('Counttill');
@@ -136,7 +174,9 @@ export function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
           <DashboardCarousel
             exercises={exercises}
             month={month}
-            onEditExercises={() => navigation.navigate('ExerciseList', { edit: true })}
+            onEditExercises={() =>
+              navigation.navigate('ExerciseList', { edit: true })
+            }
             onOpenStreak={() => navigation.navigate('Tracking')}
           />
         )}
@@ -146,15 +186,25 @@ export function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
         visible={menuOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => setMenuOpen(false)}>
+        onRequestClose={() => setMenuOpen(false)}
+      >
         <Pressable style={styles.backdrop} onPress={() => setMenuOpen(false)}>
-          <View style={[styles.menu, { marginTop: insets.top + spacing.xl + spacing.md }]}>
+          <View
+            style={[
+              styles.menu,
+              { marginTop: insets.top + spacing.xl + spacing.md },
+            ]}
+          >
             <Pressable
               accessibilityRole="switch"
               accessibilityState={{ checked: isDark }}
               accessibilityLabel="Dark theme"
               onPress={() => setDark(!isDark)}
-              style={({ pressed }) => [styles.themeRow, pressed && styles.menuItemPressed]}>
+              style={({ pressed }) => [
+                styles.themeRow,
+                pressed && styles.menuItemPressed,
+              ]}
+            >
               <Icon name="moon" size={22} color={colors.text} />
               <Text style={styles.themeText}>Dark theme</Text>
               <Switch
@@ -171,7 +221,11 @@ export function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
                 setMenuOpen(false);
                 logout();
               }}
-              style={({ pressed }) => [styles.menuItem, pressed && styles.menuItemPressed]}>
+              style={({ pressed }) => [
+                styles.menuItem,
+                pressed && styles.menuItemPressed,
+              ]}
+            >
               <Text style={styles.logoutText}>Logout</Text>
               <Icon name="logout" size={22} color={colors.danger} />
             </Pressable>
@@ -183,11 +237,22 @@ export function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
         visible={libraryOpen}
         title="Choose doctor"
         selectedId={user.doctorId}
-        onClose={() => setLibraryOpen(false)}
-        onSelect={selected => {
-          setDoctor(user.id, selected.id);
-          setLibraryOpen(false);
-          refreshUser();
+        clinic={clinic?.client ?? null}
+        onClose={closeLibrary}
+        onSelect={async selected => {
+          if (!clinic) {
+            return;
+          }
+          try {
+            await setPatientDoctor(clinic.client, user.id, selected.id);
+            closeLibrary();
+            refreshUser();
+          } catch {
+            Alert.alert(
+              'Could not change doctor',
+              'Please check the internet connection.',
+            );
+          }
         }}
       />
     </SafeAreaView>
@@ -215,7 +280,11 @@ const useStyles = makeStyles(colors =>
     greeting: { fontSize: font.body, color: colors.textMuted },
     name: { fontSize: font.hero, fontWeight: '700', color: colors.primary },
     start: { marginVertical: spacing.md },
-    backdrop: { flex: 1, backgroundColor: colors.overlay, alignItems: 'flex-end' },
+    backdrop: {
+      flex: 1,
+      backgroundColor: colors.overlay,
+      alignItems: 'flex-end',
+    },
     menu: {
       marginRight: spacing.md,
       minWidth: 240,
@@ -242,6 +311,10 @@ const useStyles = makeStyles(colors =>
       gap: spacing.xs,
     },
     menuItemPressed: { backgroundColor: colors.primaryLight },
-    logoutText: { fontSize: font.large, color: colors.danger, fontWeight: '600' },
+    logoutText: {
+      fontSize: font.large,
+      color: colors.danger,
+      fontWeight: '600',
+    },
   }),
 );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
@@ -8,9 +8,9 @@ import { Icon } from '../../components/Icon';
 import { Screen } from '../../components/Screen';
 import { TextField, useFieldStyles } from '../../components/TextField';
 import { useCurrentUser } from '../../context/AuthContext';
+import { takeHandedOffClinic, useClinicSession } from '../../context/TherapistGate';
 import type { Doctor } from '../../db/doctors';
-import { addReport } from '../../db/reports';
-import { transaction } from '../../db/database';
+import { addReports } from '../../services/api';
 import type { ScreenProps } from '../../navigation/types';
 import { pickReportPdf, pickReportPhotos, type PickedFile } from '../../services/files';
 import { font, radius, spacing } from '../../theme';
@@ -20,12 +20,23 @@ import { toDayKey } from '../../utils/date';
 // A document is either one PDF (with a title) or one or more photos (no title).
 type Selection = { kind: 'pdf'; file: PickedFile } | { kind: 'photos'; files: PickedFile[] } | null;
 
-/** Only reachable through the doctor's password (Reports → Add). */
+/** Only reachable through the clinic password (Reports → Add), which hands over a clinic session. */
 export function AddReportScreen({ navigation }: ScreenProps<'AddReport'>) {
   const styles = useStyles();
   const fieldStyles = useFieldStyles();
   const { colors } = useTheme();
   const user = useCurrentUser();
+  const [handed] = useState(takeHandedOffClinic);
+  const { clinic } = useClinicSession(handed); // ended automatically when leaving
+  const [saving, setSaving] = useState(false);
+
+  // Without a clinic session (e.g. the app was restarted on this screen) there is nothing to do.
+  useEffect(() => {
+    if (!clinic) {
+      navigation.goBack();
+    }
+  }, [clinic, navigation]);
+
   const [selection, setSelection] = useState<Selection>(null);
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(toDayKey(new Date()));
@@ -71,7 +82,7 @@ export function AddReportScreen({ navigation }: ScreenProps<'AddReport'>) {
       return files.length ? { kind: 'photos', files } : null;
     });
 
-  const save = () => {
+  const save = async () => {
     const next: typeof errors = {};
     if (!selection) {
       next.file = 'Choose a PDF or photos';
@@ -83,24 +94,23 @@ export function AddReportScreen({ navigation }: ScreenProps<'AddReport'>) {
       next.doctor = 'Choose the issuing doctor';
     }
     setErrors(next);
-    if (Object.keys(next).length || !selection || !doctor) {
+    if (Object.keys(next).length || !selection || !doctor || !clinic) {
       return;
     }
-    const files = selection.kind === 'pdf' ? [selection.file] : selection.files;
-    const docTitle = selection.kind === 'pdf' ? title.trim() : '';
-    transaction(() => {
-      for (const file of files) {
-        addReport(user.id, {
-          title: docTitle,
-          reportDate: date,
-          doctorId: doctor.id,
-          fileUri: file.uri,
-          mimeType: file.mimeType,
-          fileName: file.name,
-        });
-      }
-    });
-    navigation.goBack();
+    setSaving(true);
+    try {
+      await addReports(clinic.client, user.id, {
+        files: selection.kind === 'pdf' ? [selection.file] : selection.files,
+        title: selection.kind === 'pdf' ? title.trim() : '',
+        reportDate: date,
+        doctorId: doctor.id,
+      });
+      navigation.goBack();
+    } catch {
+      Alert.alert('Not saved', 'Uploading failed. Please check the internet connection and try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -163,7 +173,7 @@ export function AddReportScreen({ navigation }: ScreenProps<'AddReport'>) {
         onPress={() => setLibraryOpen(true)}
         style={[styles.picker, !!errors.doctor && styles.error]}>
         {doctor ? (
-          <Avatar uri={doctor.photoUri} size={44} />
+          <Avatar uri={doctor.photoUrl} size={44} />
         ) : (
           <Icon name="plus" color={colors.primary} size={28} />
         )}
@@ -171,12 +181,13 @@ export function AddReportScreen({ navigation }: ScreenProps<'AddReport'>) {
       </Pressable>
       {errors.doctor ? <Text style={fieldStyles.error}>{errors.doctor}</Text> : null}
 
-      <Button title="Save" onPress={save} style={styles.save} />
+      <Button title="Save" onPress={save} loading={saving} style={styles.save} />
 
       <DoctorLibraryModal
         visible={libraryOpen}
         title="Issuing doctor"
         selectedId={doctor?.id}
+        clinic={clinic?.client ?? null}
         onClose={() => setLibraryOpen(false)}
         onSelect={selected => {
           setDoctor(selected);

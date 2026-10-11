@@ -1,73 +1,75 @@
 import type { ImageSourcePropType } from 'react-native';
+import { query, run, transaction } from '../db/database';
 
 /**
- * Exercise Library: the clinic's pool of exercises. Patients never browse this
- * directly; it is only searched from "Add exercise" on the Exercise List.
- *
- * To add media for an exercise, put files in src/assets/exercises/ and reference them:
- *   images: [require('../assets/exercises/chin-tuck-1.jpg'), require('../assets/exercises/chin-tuck-2.jpg')],
- *   thumbnailIndex: 0,
- *   video: require('../assets/exercises/chin-tuck.mp4'),   // 5-second clip
- *
- * Exercise ids are stored in patients' lists, so never change or reuse an id.
- * Later this list can be served from the backend instead of being bundled.
+ * Exercise Library, cached from Supabase. The clinic manages it in the admin panel
+ * (names, pictures, the thumbnail and the 5-second video). Patients never browse it
+ * directly; it is only searched from "Add exercise".
  */
 export type LibraryExercise = {
   id: string;
   name: string;
   images: ImageSourcePropType[];
   thumbnailIndex: number; // which entry of `images` is the thumbnail
-  video: number | null; // require()'d 5-second video
+  videoUrl: string | null;
+  active: boolean;
 };
 
-const exercise = (id: string, name: string): LibraryExercise => ({
-  id,
-  name,
-  images: [],
-  thumbnailIndex: 0,
-  video: null,
+type ExerciseRow = {
+  id: string;
+  name: string;
+  image_urls: string;
+  thumbnail_index: number;
+  video_url: string | null;
+  active: number;
+};
+
+export type CachedExercise = {
+  id: string;
+  name: string;
+  imageUrls: string[];
+  thumbnailIndex: number;
+  videoUrl: string | null;
+  active: boolean;
+};
+
+const toExercise = (row: ExerciseRow): LibraryExercise => ({
+  id: row.id,
+  name: row.name,
+  images: (JSON.parse(row.image_urls) as string[]).map(uri => ({ uri })),
+  thumbnailIndex: row.thumbnail_index,
+  videoUrl: row.video_url,
+  active: row.active === 1,
 });
 
-// Starter set of common spine/joint rehab exercises. Replace or extend with the clinic's own.
-export const EXERCISE_LIBRARY: LibraryExercise[] = [
-  exercise('chin-tuck', 'Chin Tuck'),
-  exercise('neck-side-bend', 'Neck Side Bend'),
-  exercise('neck-rotation', 'Neck Rotation'),
-  exercise('shoulder-shrug', 'Shoulder Shrug'),
-  exercise('shoulder-blade-squeeze', 'Shoulder Blade Squeeze'),
-  exercise('wall-push-up', 'Wall Push-up'),
-  exercise('pelvic-tilt', 'Pelvic Tilt'),
-  exercise('knee-to-chest', 'Knee to Chest Stretch'),
-  exercise('double-knee-to-chest', 'Double Knee to Chest'),
-  exercise('bridging', 'Bridging'),
-  exercise('cat-camel', 'Cat-Camel'),
-  exercise('bird-dog', 'Bird Dog'),
-  exercise('prone-press-up', 'Prone Press-up'),
-  exercise('lower-trunk-rotation', 'Lower Trunk Rotation'),
-  exercise('piriformis-stretch', 'Piriformis Stretch'),
-  exercise('hamstring-stretch', 'Hamstring Stretch'),
-  exercise('straight-leg-raise', 'Straight Leg Raise'),
-  exercise('quadriceps-set', 'Quadriceps Set'),
-  exercise('heel-slide', 'Heel Slide'),
-  exercise('ankle-pump', 'Ankle Pump'),
-  exercise('calf-stretch', 'Calf Stretch'),
-  exercise('clamshell', 'Clamshell'),
-];
+export function cacheLibrary(exercises: CachedExercise[]) {
+  transaction(() => {
+    run('DELETE FROM exercises');
+    for (const e of exercises) {
+      run(
+        `INSERT INTO exercises (id, name, image_urls, thumbnail_index, video_url, active)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [e.id, e.name, JSON.stringify(e.imageUrls), e.thumbnailIndex, e.videoUrl, e.active ? 1 : 0],
+      );
+    }
+  });
+}
 
-const byId = new Map(EXERCISE_LIBRARY.map(item => [item.id, item]));
-
-export function getLibraryExercise(id: string) {
-  return byId.get(id) ?? null;
+/** Also returns inactive exercises, so lists that still contain them keep working. */
+export function getLibraryExercise(id: string): LibraryExercise | null {
+  const row = query<ExerciseRow>('SELECT * FROM exercises WHERE id = ?', [id])[0];
+  return row ? toExercise(row) : null;
 }
 
 export function getThumbnail(item: LibraryExercise): ImageSourcePropType | null {
   return item.images[item.thumbnailIndex] ?? item.images[0] ?? null;
 }
 
-export function searchLibrary(text: string) {
-  const needle = text.trim().toLowerCase();
-  if (!needle) {
-    return EXERCISE_LIBRARY;
-  }
-  return EXERCISE_LIBRARY.filter(item => item.name.toLowerCase().includes(needle));
+/** Active exercises matching the search text, for "Add exercise". */
+export function searchLibrary(text: string): LibraryExercise[] {
+  const needle = `%${text.trim().toLowerCase()}%`;
+  return query<ExerciseRow>(
+    'SELECT * FROM exercises WHERE active = 1 AND lower(name) LIKE ? ORDER BY name COLLATE NOCASE',
+    [needle],
+  ).map(toExercise);
 }

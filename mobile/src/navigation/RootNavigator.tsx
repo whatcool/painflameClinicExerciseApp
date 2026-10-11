@@ -5,7 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { LockScreen } from '../screens/auth/LockScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
-import { SignupScreen } from '../screens/auth/SignupScreen';
+import { ActivateScreen } from '../screens/auth/ActivateScreen';
 import { AddReportScreen } from '../screens/main/AddReportScreen';
 import { CounttillScreen } from '../screens/main/CounttillScreen';
 import { SessionCompleteScreen } from '../screens/main/SessionCompleteScreen';
@@ -91,9 +91,9 @@ export function RootNavigator() {
                 options={{ headerShown: false }}
               />
               <Stack.Screen
-                name="Signup"
-                component={SignupScreen}
-                options={{ title: 'Sign up' }}
+                name="Activate"
+                component={ActivateScreen}
+                options={{ title: 'Activate account' }}
               />
             </>
           )}

@@ -2,7 +2,16 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import NativeCoach from '../../specs/NativeCoach';
 
 // Words that start a rep. Hindi words are included because many patients may say them.
-export const GO_WORDS = ['go', 'start', 'started', 'chalo', 'shuru', 'shuroo', 'चलो', 'शुरू'];
+export const GO_WORDS = [
+  'go',
+  'start',
+  'started',
+  'chalo',
+  'shuru',
+  'shuroo',
+  'चलो',
+  'शुरू',
+];
 
 // The microphone listens in 10-second windows, starting a new window until "Go" is heard.
 export const LISTEN_WINDOW_MS = 10_000;
@@ -11,7 +20,11 @@ export const LISTEN_WINDOW_MS = 10_000;
 export class Interrupted extends Error {}
 
 /** Rejects with `Interrupted` as soon as `signal` aborts; runs `onAbort` to stop native work. */
-function interruptible<T>(signal: AbortSignal, work: Promise<T>, onAbort?: () => void) {
+function interruptible<T>(
+  signal: AbortSignal,
+  work: Promise<T>,
+  onAbort?: () => void,
+) {
   return new Promise<T>((resolve, reject) => {
     if (signal.aborted) {
       onAbort?.();
@@ -37,13 +50,18 @@ function interruptible<T>(signal: AbortSignal, work: Promise<T>, onAbort?: () =>
 }
 
 export function speak(text: string, signal: AbortSignal) {
-  return interruptible(signal, NativeCoach?.speak(text) ?? Promise.resolve(), () =>
-    NativeCoach?.stopSpeaking(),
+  return interruptible(
+    signal,
+    NativeCoach?.speak(text) ?? Promise.resolve(),
+    () => NativeCoach?.stopSpeaking(),
   );
 }
 
 export function playSound(name: 'whistle' | 'bell', signal: AbortSignal) {
-  return interruptible(signal, NativeCoach?.playSound(name) ?? Promise.resolve());
+  return interruptible(
+    signal,
+    NativeCoach?.playSound(name) ?? Promise.resolve(),
+  );
 }
 
 export function sleep(ms: number, signal: AbortSignal) {
@@ -57,24 +75,35 @@ export function sleep(ms: number, signal: AbortSignal) {
   );
 }
 
-export type ListenOutcome = 'voice' | 'tap' | 'voice-unavailable';
+// After this many empty windows the app stops listening and asks for a tap instead.
+// This also covers the patient leaving the app, where Android may block the microphone.
+export const MAX_LISTEN_WINDOWS = 3;
+
+export type ListenOutcome = 'voice' | 'tap' | 'no-speech' | 'voice-unavailable';
+
+type WaitHandlers = {
+  /** No speech recognition on this phone, or microphone permission refused. */
+  onVoiceUnavailable: () => void;
+  /** Called once after the last empty window, e.g. to announce it. */
+  onNoSpeech: () => Promise<void>;
+};
 
 /**
- * Waits until the patient says "Go"/"Start" or taps the on-screen button.
- * Listens in 10-second windows and simply opens a new window after each one.
- * If voice recognition can't be used, it falls back to waiting for the tap only.
+ * Waits until the patient says "Go"/"Start" or taps the screen.
+ * Listens in up to 3 windows of 10 seconds; if nothing is heard, calls onNoSpeech
+ * and then waits for a tap only.
  */
 export async function waitForGo(
   signal: AbortSignal,
   tapped: Promise<void>,
   voiceEnabled: boolean,
-  onVoiceUnavailable: () => void,
+  handlers: WaitHandlers,
 ): Promise<ListenOutcome> {
   const tap = tapped.then(() => 'tap' as const);
   if (!voiceEnabled || !NativeCoach) {
     return interruptible(signal, tap);
   }
-  for (;;) {
+  for (let window = 1; window <= MAX_LISTEN_WINDOWS; window++) {
     const result = await interruptible(
       signal,
       Promise.race([NativeCoach.listen(GO_WORDS, LISTEN_WINDOW_MS), tap]),
@@ -87,20 +116,29 @@ export async function waitForGo(
       NativeCoach.stopListening();
       return 'tap';
     }
-    if (result === 'unavailable' || result === 'permission' || result === 'error') {
-      onVoiceUnavailable();
+    if (result === 'unavailable' || result === 'permission') {
+      handlers.onVoiceUnavailable();
       await interruptible(signal, tap);
       return 'voice-unavailable';
     }
-    // 'timeout' (nothing heard in this window) or 'cancelled': listen again.
+    // 'timeout' (nothing heard), 'error' or 'cancelled': this window is used up.
   }
+  await interruptible(signal, Promise.race([handlers.onNoSpeech(), tap]), () =>
+    NativeCoach?.stopSpeaking(),
+  );
+  await interruptible(signal, tap);
+  return 'no-speech';
 }
 
 /**
  * Counts down `seconds`, calling `onTick` with the whole seconds remaining.
  * Uses the clock rather than counting timer ticks, so it stays accurate.
  */
-export function countdown(seconds: number, signal: AbortSignal, onTick: (left: number) => void) {
+export function countdown(
+  seconds: number,
+  signal: AbortSignal,
+  onTick: (left: number) => void,
+) {
   let timer: ReturnType<typeof setInterval>;
   return interruptible(
     signal,
@@ -136,11 +174,15 @@ export async function isVoiceAvailable() {
   if (Platform.OS !== 'android') {
     return true;
   }
-  const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO, {
-    title: 'Use your voice',
-    message: 'Say “Go” or “Start” to begin each rep, so you don’t have to touch the phone.',
-    buttonPositive: 'Allow',
-    buttonNegative: 'Not now',
-  });
+  const result = await PermissionsAndroid.request(
+    PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+    {
+      title: 'Use your voice',
+      message:
+        'Say “Go” or “Start” to begin each rep, so you don’t have to touch the phone.',
+      buttonPositive: 'Allow',
+      buttonNegative: 'Not now',
+    },
+  );
   return result === PermissionsAndroid.RESULTS.GRANTED;
 }

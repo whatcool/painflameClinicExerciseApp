@@ -4,30 +4,49 @@ Physiotherapy exercise app for Painflame Clinic patients.
 
 ```
 painflameTherapies/
-├── mobile/    React Native app (Android 11+, minSdk 30)
-└── backend/   Node.js + Express API (not used by the app yet)
+├── mobile/     React Native patient app (Android 11+, minSdk 30)
+├── admin/      Clinic admin panel (React + Vite web app)
+├── supabase/   Database schema, security rules, Edge Functions, seed data
+└── backend/    Old Node/Express skeleton: no longer used (Supabase replaces it)
 ```
+
+**First-time setup of the server: see [SUPABASE_SETUP.md](SUPABASE_SETUP.md).**
+
+## How data is stored
+
+- **Supabase** (Postgres + file storage, region Mumbai) holds patients, doctors, the Exercise
+  Library with its images/videos, exercise lists, reports and tracking. Row level security
+  makes sure a patient only ever sees their own data; the shared clinic login sees everything.
+- **On the phone**: the login tokens (Android Keystore), fingerprint setting, theme, a local PIN
+  hash for the offline lock screen, and an offline cache (SQLite) of the patient's data.
+  Exercise days recorded offline are sent when the phone is back online.
+- **Accounts**: the clinic creates each patient in the admin panel and gives them a one-time
+  8-digit code; the patient activates the app with it and chooses a 6-digit PIN. A forgotten PIN
+  is reset the same way. 5 wrong PINs lock the account for 15 minutes.
+- **Exercise lists**: only therapists edit them, unless the clinic unlocks editing for that patient
+  (admin panel, or the switch on the app's edit page behind the clinic password).
 
 ## Mobile app (`mobile/`)
 
 - React Native 0.87, TypeScript, package `com.painflame.therapies`
-- All data is stored on the phone (SQLite). Several patients can use one phone; each
-  account is identified by its mobile number and keeps its own data after logout.
+- Several patients can use one phone; each keeps their cached data after logout.
+- Server settings: `src/config/supabase.ts`.
 
 ### Source layout
 
 ```
 mobile/src/
-├── config/therapist.ts     Doctor's password (the only place it is defined)
+├── config/supabase.ts      Supabase URL, publishable key, clinic login e-mail
 ├── theme/                  Brand colours (from the logo), font sizes, spacing
-├── db/                     SQLite schema + data access (users, doctors, exercise lists, reports, tracking)
-├── data/exerciseLibrary.ts Exercise Library (bundled seed data)
-├── security/               PIN hashing (PBKDF2-SHA256, salted), fingerprint unlock
-├── services/files.ts       Pick images/PDFs and copy them into app storage
-├── context/                Auth/session state, therapist password gate
+├── db/                     Offline cache (SQLite) of the patient's server data
+├── data/exerciseLibrary.ts Exercise Library cache
+├── security/               Local PIN hash for the lock screen, fingerprint unlock
+├── services/               supabase.ts (client), sync.ts (server → cache), api.ts (writes),
+│                           files.ts (pickers), coach.ts (exercise session voice/sounds)
+├── context/                Auth/session state, clinic password gate
 ├── navigation/             Screen stack
 ├── components/             Shared UI (buttons, fields, doctor card, doctor library, ...)
-└── screens/                auth/ (login, sign-up, lock) and main/ (dashboard, profile, tracking, exercise list, reports)
+└── screens/                auth/ (login, activate, lock) and main/ (dashboard, profile, tracking, exercise list, reports)
 ```
 
 ### Exercise session ("Counttill")
@@ -50,17 +69,11 @@ Toggle in the dashboard's hamburger menu. Colours live in `mobile/src/theme/inde
 (`lightColors` / `darkColors`); components get them through `makeStyles` / `useTheme`
 in `mobile/src/theme/ThemeContext.tsx`.
 
-### Exercise Library (adding exercises)
+### Exercise Library and Doctor Library
 
-Edit `mobile/src/data/exerciseLibrary.ts`. Put images and the 5-second video in
-`mobile/src/assets/exercises/` and reference them with `require(...)`. `thumbnailIndex` picks
-which image is the thumbnail. Never change an existing exercise `id` (patients' lists store it).
-Until images are added, the list shows the exercise's initials.
-
-### Doctor Library
-
-Managed inside the app, behind the doctor's password: Dashboard → doctor card → Add/Change,
-or Reports → Add → Issuing doctor. Both screens let the clinic add or edit doctors.
+Managed in the admin panel (`admin/`): names, images (with the thumbnail), the 5-second video,
+and doctors with photos. Therapists can also add or edit doctors in the app after entering the
+clinic password (Dashboard → doctor card, or Reports → Add → Issuing doctor).
 
 ### Run in development (Android Studio)
 
@@ -93,13 +106,24 @@ cd mobile
 npm test
 ```
 
-## Backend (`backend/`)
+## Admin panel (`admin/`)
 
 ```
-cd backend
+cd admin
+copy .env.example .env     (fill in Supabase URL + publishable key)
 npm install
-copy .env.example .env
 npm run dev
 ```
 
-Health check: `GET http://localhost:3000/api/health`
+Sign in with the shared clinic login. Patients, Exercise Library and Doctors pages; each patient
+page has profile, exercise list (with the "patient can edit" switch), reports, tracking and
+account actions (new setup code, delete). Deploy free on Netlify / Vercel / Cloudflare Pages
+(build `npm run build`, output `dist`).
+
+## Server (`supabase/`)
+
+- `migrations/`: tables, row level security, storage buckets and policies
+- `functions/`: `patient-login`, `activate-patient`, `clinic-patients` (Edge Functions)
+- `seed.sql`: starter exercise names
+
+Setup steps: [SUPABASE_SETUP.md](SUPABASE_SETUP.md).

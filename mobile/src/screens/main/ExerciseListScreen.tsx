@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import ReorderableList, {
   reorderItems,
   useReorderableDrag,
@@ -11,15 +11,21 @@ import { Button } from '../../components/Button';
 import { ExerciseThumb } from '../../components/ExerciseThumb';
 import { Icon } from '../../components/Icon';
 import { Stepper } from '../../components/Stepper';
-import { useCurrentUser } from '../../context/AuthContext';
+import { useAuth, useCurrentUser } from '../../context/AuthContext';
+import {
+  useClinicSession,
+  useTherapistGate,
+  type ClinicSession,
+} from '../../context/TherapistGate';
 import { getLibraryExercise } from '../../data/exerciseLibrary';
 import {
   DEFAULT_HOLD_SECONDS,
   DEFAULT_REPS,
   getExerciseList,
-  saveExerciseList,
   type PatientExercise,
 } from '../../db/exerciseList';
+import { saveExerciseList, setPatientCanEdit } from '../../services/api';
+import { supabase } from '../../services/supabase';
 import type { ScreenProps } from '../../navigation/types';
 import { font, radius, spacing } from '../../theme';
 import { makeStyles, useTheme } from '../../theme/ThemeContext';
@@ -33,41 +39,104 @@ export function ExerciseListScreen({ navigation, route }: ScreenProps<'ExerciseL
   const styles = useStyles();
   const { colors } = useTheme();
   const user = useCurrentUser();
+  const { refreshUser } = useAuth();
+  const requireTherapist = useTherapistGate();
+  // Set while a therapist is editing on this phone (after the clinic password).
+  const { clinic, setClinic, endClinic } = useClinicSession();
   const [items, setItems] = useState(() => getExerciseList(user.id));
-  // Opened from the dashboard's edit button: start straight in edit mode.
-  const openInEdit = route.params?.edit === true;
-  const [draft, setDraft] = useState<DraftItem[] | null>(() =>
-    openInEdit ? items.map(withKey) : null,
-  ); // non-null = edit mode
-  // With an empty list there is nothing to edit yet, so open the exercise search.
-  const [adding, setAdding] = useState(openInEdit && items.length === 0);
+  const [draft, setDraft] = useState<DraftItem[] | null>(null); // non-null = edit mode
+  const [adding, setAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
+  // Only therapists edit lists, unless the clinic has unlocked editing for this patient.
+  const patientCanEdit = user.canEditExercises;
+
+  const beginEdit = useCallback(
+    (openSearch: boolean) => {
+      const current = getExerciseList(user.id);
+      setDraft(current.map(withKey));
+      // With an empty list there is nothing to edit yet, so open the exercise search.
+      setAdding(openSearch || current.length === 0);
+    },
+    [user.id],
+  );
 
   const startEditing = useCallback(
     (openSearch = false) => {
-      setDraft(items.map(withKey));
-      setAdding(openSearch);
+      if (patientCanEdit) {
+        beginEdit(openSearch);
+        return;
+      }
+      requireTherapist(session => {
+        setClinic(session);
+        beginEdit(openSearch);
+      });
     },
-    [items],
+    [patientCanEdit, beginEdit, requireTherapist, setClinic],
   );
 
-  const save = useCallback(() => {
-    if (!draft) {
+  // Opened from the dashboard's edit button: go straight to editing.
+  const openInEdit = route.params?.edit === true;
+  useEffect(() => {
+    if (openInEdit) {
+      startEditing();
+    }
+    // Only on first open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const save = useCallback(async () => {
+    if (!draft || saving) {
       return;
     }
     const cleaned = draft.map(({ key: _key, ...rest }) => rest);
-    saveExerciseList(user.id, cleaned);
-    setItems(cleaned);
-    setDraft(null);
-  }, [draft, user.id]);
+    setSaving(true);
+    try {
+      await saveExerciseList(clinic?.client ?? supabase, user.id, cleaned);
+      setItems(cleaned);
+      setDraft(null);
+      endClinic();
+    } catch {
+      Alert.alert(
+        'List not saved',
+        'Please check the internet connection. If editing was switched off by the clinic, ask your therapist.',
+      );
+    } finally {
+      setSaving(false);
+    }
+  }, [draft, saving, clinic, user.id, endClinic]);
 
-  const cancel = useCallback(() => setDraft(null), []);
+  const cancel = useCallback(() => {
+    setDraft(null);
+    endClinic();
+  }, [endClinic]);
+
+  /** Turns the patient's own editing on or off. Always needs the clinic password. */
+  const togglePatientEditing = (allow: boolean) => {
+    const apply = async (session: ClinicSession, endAfter: boolean) => {
+      try {
+        await setPatientCanEdit(session.client, user.id, allow);
+        refreshUser();
+      } catch {
+        Alert.alert('Not changed', 'Please check the internet connection and try again.');
+      } finally {
+        if (endAfter) {
+          session.end();
+        }
+      }
+    };
+    if (clinic) {
+      apply(clinic, false);
+    } else {
+      requireTherapist(session => apply(session, true));
+    }
+  };
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () =>
         draft ? (
-          <Pressable onPress={save} hitSlop={12}>
-            <Text style={styles.headerAction}>Save</Text>
+          <Pressable onPress={save} hitSlop={12} disabled={saving}>
+            <Text style={styles.headerAction}>{saving ? 'Saving…' : 'Save'}</Text>
           </Pressable>
         ) : (
           <Pressable onPress={() => startEditing()} hitSlop={12} style={styles.headerEdit}>
@@ -76,7 +145,7 @@ export function ExerciseListScreen({ navigation, route }: ScreenProps<'ExerciseL
           </Pressable>
         ),
     });
-  }, [navigation, draft, save, startEditing, styles, colors]);
+  }, [navigation, draft, save, saving, startEditing, styles, colors]);
 
   // Ask before leaving with unsaved edits.
   useEffect(
@@ -110,6 +179,20 @@ export function ExerciseListScreen({ navigation, route }: ScreenProps<'ExerciseL
 
     return (
       <SafeAreaView style={styles.safe} edges={['bottom']}>
+        <View style={styles.permission}>
+          <View style={styles.flex}>
+            <Text style={styles.permissionTitle}>Patient can edit this list</Text>
+            <Text style={styles.permissionHint}>
+              {clinic ? 'Editing as clinic. ' : ''}Changing this needs the clinic password.
+            </Text>
+          </View>
+          <Switch
+            value={patientCanEdit}
+            onValueChange={togglePatientEditing}
+            trackColor={{ true: colors.primary, false: colors.border }}
+            thumbColor={colors.white}
+          />
+        </View>
         <Text style={styles.hint}>Long-press an exercise and drag it to change the order.</Text>
         <ReorderableList
           data={draft}
@@ -137,7 +220,7 @@ export function ExerciseListScreen({ navigation, route }: ScreenProps<'ExerciseL
         />
         <View style={styles.bottomBar}>
           <Button title="Cancel" variant="secondary" onPress={cancel} style={styles.flex} />
-          <Button title="Save list" onPress={save} style={styles.flex} />
+          <Button title="Save list" onPress={save} loading={saving} style={styles.flex} />
         </View>
         <AddExerciseModal
           visible={adding}
@@ -164,6 +247,13 @@ export function ExerciseListScreen({ navigation, route }: ScreenProps<'ExerciseL
         data={items}
         keyExtractor={(item, index) => `${item.exerciseId}-${index}`}
         contentContainerStyle={styles.list}
+        ListHeaderComponent={
+          patientCanEdit ? undefined : (
+            <Text style={styles.managedNote}>
+              Your therapist manages this list. Editing needs the clinic password.
+            </Text>
+          )
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyText}>No exercises in your list yet.</Text>
@@ -258,6 +348,26 @@ const useStyles = makeStyles(colors =>
   StyleSheet.create({
     safe: { flex: 1, backgroundColor: colors.background },
     list: { padding: spacing.md, paddingBottom: spacing.xl },
+    permission: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      margin: spacing.md,
+      marginBottom: 0,
+      padding: spacing.md,
+      backgroundColor: colors.surface,
+      borderRadius: radius.md,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    permissionTitle: { fontSize: font.body, fontWeight: '600', color: colors.text },
+    permissionHint: { fontSize: font.small - 2, color: colors.textMuted, marginTop: 2 },
+    managedNote: {
+      fontSize: font.small,
+      color: colors.textMuted,
+      marginBottom: spacing.md,
+      textAlign: 'center',
+    },
     hint: {
       fontSize: font.small,
       color: colors.textMuted,

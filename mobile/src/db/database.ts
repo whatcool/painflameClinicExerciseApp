@@ -61,6 +61,72 @@ const MIGRATIONS: string[][] = [
   ],
   // v2: remember whether the patient has seen the Counttill (exercise session) tour.
   ['ALTER TABLE users ADD COLUMN counttill_tour_done INTEGER NOT NULL DEFAULT 0'],
+  // v3: data now lives in Supabase. These tables are an offline cache of the server,
+  // per patient (several patients can use one phone). Old local-only data is dropped.
+  [
+    'DROP TABLE IF EXISTS reports',
+    'DROP TABLE IF EXISTS patient_exercises',
+    'DROP TABLE IF EXISTS exercise_days',
+    'DROP TABLE IF EXISTS users',
+    'DROP TABLE IF EXISTS doctors',
+    "DELETE FROM app_state WHERE key = 'session_user_id'",
+    `CREATE TABLE patients (
+      id TEXT PRIMARY KEY,
+      mobile TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      gender TEXT NOT NULL,
+      dob TEXT NOT NULL,
+      photo_path TEXT,
+      photo_url TEXT,
+      doctor_id TEXT,
+      can_edit_exercises INTEGER NOT NULL DEFAULT 0,
+      counttill_tour_done INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    )`,
+    `CREATE TABLE doctors (
+      id TEXT PRIMARY KEY,
+      full_name TEXT NOT NULL,
+      contact TEXT NOT NULL,
+      photo_url TEXT,
+      start_month INTEGER NOT NULL,
+      start_year INTEGER NOT NULL
+    )`,
+    `CREATE TABLE exercises (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      image_urls TEXT NOT NULL,
+      thumbnail_index INTEGER NOT NULL,
+      video_url TEXT,
+      active INTEGER NOT NULL
+    )`,
+    `CREATE TABLE patient_exercises (
+      patient_id TEXT NOT NULL,
+      position INTEGER NOT NULL,
+      exercise_id TEXT NOT NULL,
+      reps INTEGER NOT NULL,
+      hold_seconds INTEGER NOT NULL,
+      PRIMARY KEY (patient_id, position)
+    )`,
+    `CREATE TABLE reports (
+      id TEXT PRIMARY KEY,
+      patient_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      report_date TEXT NOT NULL,
+      doctor_id TEXT NOT NULL,
+      doctor_name TEXT NOT NULL,
+      file_path TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      file_name TEXT
+    )`,
+    // synced = 0: recorded on this phone, not yet sent to the server.
+    `CREATE TABLE exercise_days (
+      patient_id TEXT NOT NULL,
+      day TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('complete', 'partial')),
+      synced INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (patient_id, day)
+    )`,
+  ],
 ];
 
 function migrate(database: DB) {

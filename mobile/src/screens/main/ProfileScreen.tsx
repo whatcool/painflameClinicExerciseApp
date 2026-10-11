@@ -8,7 +8,8 @@ import { Icon } from '../../components/Icon';
 import { Screen } from '../../components/Screen';
 import { ReadOnlyField, TextField } from '../../components/TextField';
 import { useAuth, useCurrentUser } from '../../context/AuthContext';
-import { setBiometricEnabled, setPhoto, updateProfile, type Gender } from '../../db/users';
+import { setBiometricEnabled, type Gender } from '../../db/users';
+import { updateProfile, uploadProfilePhoto } from '../../services/api';
 import {
   disableFingerprint,
   enableFingerprint,
@@ -31,6 +32,8 @@ export function ProfileScreen() {
   const [dobError, setDobError] = useState('');
   const [fingerprintSupported, setFingerprintSupported] = useState(false);
   const [togglingFingerprint, setTogglingFingerprint] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     isFingerprintAvailable().then(setFingerprintSupported);
@@ -38,7 +41,7 @@ export function ProfileScreen() {
 
   const dirty = fullName !== user.fullName || gender !== user.gender || dob !== user.dob;
 
-  const save = () => {
+  const save = async () => {
     if (!fullName.trim()) {
       setNameError('Enter your full name');
       return;
@@ -49,20 +52,30 @@ export function ProfileScreen() {
       return;
     }
     setDobError('');
-    updateProfile(user.id, { fullName: fullName.trim(), gender, dob });
-    refreshUser();
-    Alert.alert('Saved', 'Your profile has been updated.');
+    setSaving(true);
+    try {
+      await updateProfile(user.id, { full_name: fullName.trim(), gender, dob });
+      refreshUser();
+      Alert.alert('Saved', 'Your profile has been updated.');
+    } catch {
+      Alert.alert('Not saved', 'Please check your internet connection and try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const changePhoto = async () => {
     try {
       const file = await pickImage('profile');
       if (file) {
-        setPhoto(user.id, file.uri);
+        setUploading(true);
+        await uploadProfilePhoto(user.id, file, user.photoPath);
         refreshUser();
       }
     } catch {
-      Alert.alert('Could not add photo', 'Please try a different image.');
+      Alert.alert('Could not add photo', 'Please check your internet connection and try again.');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -89,14 +102,14 @@ export function ProfileScreen() {
   return (
     <Screen>
       <View style={styles.photoBlock}>
-        <Avatar uri={user.photoUri} size={130} />
+        <Avatar uri={user.photoUrl} size={130} />
         <Pressable
           accessibilityRole="button"
           onPress={changePhoto}
           style={styles.photoButton}
           hitSlop={8}>
           <Icon name="camera" size={18} color={colors.white} />
-          <Text style={styles.photoButtonText}>{user.photoUri ? 'Edit photo' : 'Add photo'}</Text>
+          <Text style={styles.photoButtonText}>{uploading ? 'Uploading…' : user.photoUrl ? 'Edit photo' : 'Add photo'}</Text>
         </Pressable>
       </View>
 
@@ -117,7 +130,7 @@ export function ProfileScreen() {
         error={dobError}
       />
 
-      <Button title="Save changes" onPress={save} disabled={!dirty} />
+      <Button title="Save changes" onPress={save} disabled={!dirty} loading={saving} />
 
       {fingerprintSupported && (
         <View style={styles.toggleRow}>

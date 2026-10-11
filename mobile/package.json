@@ -17,6 +17,7 @@
     "@react-native-documents/viewer": "4.0.1",
     "@react-navigation/native": "7.4.1",
     "@react-navigation/native-stack": "7.19.2",
+    "@supabase/supabase-js": "2.117.2",
     "react": "19.2.3",
     "react-native": "0.87.1",
     "react-native-gesture-handler": "2.33.0",
@@ -27,6 +28,7 @@
     "react-native-safe-area-context": "^5.5.2",
     "react-native-screens": "4.28.0",
     "react-native-svg": "15.15.5",
+    "react-native-url-polyfill": "4.0.0",
     "react-native-video": "6.19.3",
     "react-native-worklets": "0.12.1"
   },

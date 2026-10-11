@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Modal,
@@ -10,8 +11,10 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { addDoctor, listDoctors, updateDoctor, type Doctor } from '../db/doctors';
-import { pickImage } from '../services/files';
+import { listDoctors, type Doctor } from '../db/doctors';
+import { fetchDoctors, saveDoctor } from '../services/api';
+import { pickImage, type PickedFile } from '../services/files';
+import type { Client } from '../services/supabase';
 import { font, radius, spacing } from '../theme';
 import { makeStyles, useTheme } from '../theme/ThemeContext';
 import { formatMonthYear } from '../utils/date';
@@ -24,32 +27,51 @@ import { TextField } from './TextField';
 type Props = {
   visible: boolean;
   title: string;
-  selectedId?: number | null;
+  selectedId?: string | null;
+  /** Clinic connection from the password gate; all reads and writes here use it. */
+  clinic: Client | null;
   onSelect: (doctor: Doctor) => void;
   onClose: () => void;
 };
 
 /**
- * Doctor Library. Only ever opened after the doctor's password has been entered
+ * Doctor Library. Only ever opened after the clinic password has been entered
  * (from the dashboard doctor card or the Reports "Add" flow), so adding and editing
  * doctors here happens inside that already-unlocked action.
  */
-export function DoctorLibraryModal({ visible, title, selectedId, onSelect, onClose }: Props) {
+export function DoctorLibraryModal({ visible, title, selectedId, clinic, onSelect, onClose }: Props) {
   const styles = useStyles();
   const { colors } = useTheme();
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [editing, setEditing] = useState<Doctor | 'new' | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Show the cached list at once, then the latest from the server.
+  const load = useCallback(async () => {
+    setDoctors(listDoctors());
+    if (!clinic) {
+      return;
+    }
+    setLoading(true);
+    try {
+      setDoctors(await fetchDoctors(clinic));
+    } catch {
+      // offline: keep the cached list
+    } finally {
+      setLoading(false);
+    }
+  }, [clinic]);
 
   useEffect(() => {
     if (visible) {
-      setDoctors(listDoctors());
       setEditing(null);
+      load();
     }
-  }, [visible]);
+  }, [visible, load]);
 
   const onSaved = () => {
-    setDoctors(listDoctors());
     setEditing(null);
+    load();
   };
 
   return (
@@ -69,7 +91,11 @@ export function DoctorLibraryModal({ visible, title, selectedId, onSelect, onClo
           </View>
 
           {editing ? (
-            <DoctorForm doctor={editing === 'new' ? null : editing} onSaved={onSaved} />
+            <DoctorForm
+              doctor={editing === 'new' ? null : editing}
+              clinic={clinic}
+              onSaved={onSaved}
+            />
           ) : (
             <FlatList
               data={doctors}
@@ -84,13 +110,17 @@ export function DoctorLibraryModal({ visible, title, selectedId, onSelect, onClo
                 />
               }
               ListEmptyComponent={
-                <Text style={styles.empty}>No doctors yet. Add the first one.</Text>
+                loading ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : (
+                  <Text style={styles.empty}>No doctors yet. Add the first one.</Text>
+                )
               }
               renderItem={({ item }) => (
                 <Pressable
                   onPress={() => onSelect(item)}
                   style={[styles.row, item.id === selectedId && styles.rowSelected]}>
-                  <Avatar uri={item.photoUri} size={56} />
+                  <Avatar uri={item.photoUrl} size={56} />
                   <View style={styles.rowInfo}>
                     <Text style={styles.rowName}>{item.fullName}</Text>
                     <Text style={styles.rowDetail}>{item.contact}</Text>
@@ -115,10 +145,20 @@ export function DoctorLibraryModal({ visible, title, selectedId, onSelect, onClo
   );
 }
 
-function DoctorForm({ doctor, onSaved }: { doctor: Doctor | null; onSaved: () => void }) {
+function DoctorForm({
+  doctor,
+  clinic,
+  onSaved,
+}: {
+  doctor: Doctor | null;
+  clinic: Client | null;
+  onSaved: () => void;
+}) {
   const styles = useStyles();
   const now = new Date();
-  const [photoUri, setPhotoUri] = useState(doctor?.photoUri ?? null);
+  const [photoUri, setPhotoUri] = useState(doctor?.photoUrl ?? null);
+  const [newPhoto, setNewPhoto] = useState<PickedFile | null>(null);
+  const [saving, setSaving] = useState(false);
   const [fullName, setFullName] = useState(doctor?.fullName ?? '');
   const [contact, setContact] = useState(doctor?.contact ?? '');
   const [start, setStart] = useState({
@@ -132,13 +172,14 @@ function DoctorForm({ doctor, onSaved }: { doctor: Doctor | null; onSaved: () =>
       const file = await pickImage('doctor');
       if (file) {
         setPhotoUri(file.uri);
+        setNewPhoto(file);
       }
     } catch {
       Alert.alert('Could not add photo', 'Please try a different image.');
     }
   };
 
-  const save = () => {
+  const save = async () => {
     const nextErrors: typeof errors = {};
     if (!fullName.trim()) {
       nextErrors.fullName = 'Enter the doctor’s full name';
@@ -147,22 +188,25 @@ function DoctorForm({ doctor, onSaved }: { doctor: Doctor | null; onSaved: () =>
       nextErrors.contact = 'Enter a valid contact number';
     }
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length) {
+    if (Object.keys(nextErrors).length || !clinic) {
       return;
     }
-    const input = {
-      fullName: fullName.trim(),
-      contact: contact.trim(),
-      photoUri,
-      startMonth: start.month,
-      startYear: start.year,
-    };
-    if (doctor) {
-      updateDoctor(doctor.id, input);
-    } else {
-      addDoctor(input);
+    setSaving(true);
+    try {
+      await saveDoctor(clinic, {
+        id: doctor?.id ?? null,
+        fullName: fullName.trim(),
+        contact: contact.trim(),
+        startMonth: start.month,
+        startYear: start.year,
+        newPhoto,
+      });
+      onSaved();
+    } catch {
+      Alert.alert('Could not save', 'Please check the internet connection and try again.');
+    } finally {
+      setSaving(false);
     }
-    onSaved();
   };
 
   return (
@@ -186,7 +230,7 @@ function DoctorForm({ doctor, onSaved }: { doctor: Doctor | null; onSaved: () =>
         keyboardType="phone-pad"
       />
       <MonthYearField label="Working at Painflame since" value={start} onChange={setStart} />
-      <Button title="Save doctor" onPress={save} />
+      <Button title="Save doctor" onPress={save} loading={saving} />
     </ScrollView>
   );
 }

@@ -1,0 +1,25 @@
+-- Starter Exercise Library (names only). Add images and videos from the admin panel.
+insert into public.exercises (id, name) values
+  ('chin-tuck', 'Chin Tuck'),
+  ('neck-side-bend', 'Neck Side Bend'),
+  ('neck-rotation', 'Neck Rotation'),
+  ('shoulder-shrug', 'Shoulder Shrug'),
+  ('shoulder-blade-squeeze', 'Shoulder Blade Squeeze'),
+  ('wall-push-up', 'Wall Push-up'),
+  ('pelvic-tilt', 'Pelvic Tilt'),
+  ('knee-to-chest', 'Knee to Chest Stretch'),
+  ('double-knee-to-chest', 'Double Knee to Chest'),
+  ('bridging', 'Bridging'),
+  ('cat-camel', 'Cat-Camel'),
+  ('bird-dog', 'Bird Dog'),
+  ('prone-press-up', 'Prone Press-up'),
+  ('lower-trunk-rotation', 'Lower Trunk Rotation'),
+  ('piriformis-stretch', 'Piriformis Stretch'),
+  ('hamstring-stretch', 'Hamstring Stretch'),
+  ('straight-leg-raise', 'Straight Leg Raise'),
+  ('quadriceps-set', 'Quadriceps Set'),
+  ('heel-slide', 'Heel Slide'),
+  ('ankle-pump', 'Ankle Pump'),
+  ('calf-stretch', 'Calf Stretch'),
+  ('clamshell', 'Clamshell')
+on conflict (id) do nothing;

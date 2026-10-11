@@ -4,7 +4,8 @@ import { Button } from '../../components/Button';
 import { Logo } from '../../components/Logo';
 import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
-import { useAuth } from '../../context/AuthContext';
+import { isSupabaseConfigured } from '../../config/supabase';
+import { authErrorMessage, useAuth } from '../../context/AuthContext';
 import type { ScreenProps } from '../../navigation/types';
 import { PIN_LENGTH } from '../../security/pin';
 import { font, spacing } from '../../theme';
@@ -26,10 +27,10 @@ export function LoginScreen({ navigation }: ScreenProps<'Login'>) {
     }
     setBusy(true);
     setError('');
-    const ok = await login(mobile, pin);
+    const result = await login(mobile, pin);
     setBusy(false);
-    if (!ok) {
-      setError('Mobile number or PIN is incorrect');
+    if (!result.ok) {
+      setError(authErrorMessage(result));
       setPin('');
     }
   };
@@ -39,6 +40,11 @@ export function LoginScreen({ navigation }: ScreenProps<'Login'>) {
       <Logo width={260} />
       <Text style={styles.title}>Welcome</Text>
       <Text style={styles.subtitle}>Log in to see your exercises</Text>
+      {!isSupabaseConfigured() && (
+        <Text style={styles.error}>
+          The app is not connected to the server yet. Fill in src/config/supabase.ts.
+        </Text>
+      )}
 
       <TextField
         label="Mobile number"
@@ -63,9 +69,9 @@ export function LoginScreen({ navigation }: ScreenProps<'Login'>) {
       <Button title="Log in" onPress={submit} loading={busy} />
 
       <View style={styles.footer}>
-        <Text style={styles.footerText}>New patient?</Text>
-        <Pressable onPress={() => navigation.navigate('Signup')} hitSlop={10}>
-          <Text style={styles.link}>Create an account</Text>
+        <Text style={styles.footerText}>First time, or forgot PIN?</Text>
+        <Pressable onPress={() => navigation.navigate('Activate')} hitSlop={10}>
+          <Text style={styles.link}>Activate with clinic code</Text>
         </Pressable>
       </View>
     </Screen>

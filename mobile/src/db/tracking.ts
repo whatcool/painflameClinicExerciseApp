@@ -1,29 +1,55 @@
 import { addDays, daysInMonth, toDayKey } from '../utils/date';
-import { query, run } from './database';
+import { query, run, transaction } from './database';
 
 export type DayStatus = 'complete' | 'partial';
 export type DotColor = 'green' | 'orange' | 'red' | null; // null = no dot
 
 /**
- * Records the result of a day's session. To be called by the Start (exercise session)
- * flow: 'complete' when every exercise in the list was finished, 'partial' when some
- * were skipped. A 'complete' day is never downgraded.
+ * Records the result of a day's session on this phone (synced = 0). The sync service
+ * sends it to the server. 'complete' when every exercise was finished, 'partial' when
+ * some were skipped. A 'complete' day is never downgraded.
  */
-export function recordExerciseDay(userId: number, day: string, status: DayStatus) {
+export function recordExerciseDay(patientId: string, day: string, status: DayStatus) {
   run(
-    `INSERT INTO exercise_days (user_id, day, status) VALUES (?, ?, ?)
-     ON CONFLICT (user_id, day) DO UPDATE SET status =
+    `INSERT INTO exercise_days (patient_id, day, status, synced) VALUES (?, ?, ?, 0)
+     ON CONFLICT (patient_id, day) DO UPDATE SET synced = 0, status =
        CASE WHEN exercise_days.status = 'complete' THEN 'complete' ELSE excluded.status END`,
-    [userId, day, status],
+    [patientId, day, status],
   );
 }
 
-export function getMonthStatuses(userId: number, year: number, monthIndex: number) {
+export function getUnsyncedDays(patientId: string) {
+  return query<{ day: string; status: DayStatus }>(
+    'SELECT day, status FROM exercise_days WHERE patient_id = ? AND synced = 0',
+    [patientId],
+  );
+}
+
+export function markDaySynced(patientId: string, day: string) {
+  run('UPDATE exercise_days SET synced = 1 WHERE patient_id = ? AND day = ?', [patientId, day]);
+}
+
+/** Replaces synced days with the server's copy; days not yet sent are kept. */
+export function cacheExerciseDays(patientId: string, days: { day: string; status: DayStatus }[]) {
+  transaction(() => {
+    run('DELETE FROM exercise_days WHERE patient_id = ? AND synced = 1', [patientId]);
+    for (const d of days) {
+      run(
+        `INSERT INTO exercise_days (patient_id, day, status, synced) VALUES (?, ?, ?, 1)
+         ON CONFLICT (patient_id, day) DO UPDATE SET status =
+           CASE WHEN exercise_days.status = 'complete' THEN 'complete' ELSE excluded.status END`,
+        [patientId, d.day, d.status],
+      );
+    }
+  });
+}
+
+export function getMonthStatuses(patientId: string, year: number, monthIndex: number) {
   const first = toDayKey(new Date(year, monthIndex, 1));
   const last = toDayKey(new Date(year, monthIndex, daysInMonth(year, monthIndex)));
   const rows = query<{ day: string; status: DayStatus }>(
-    'SELECT day, status FROM exercise_days WHERE user_id = ? AND day BETWEEN ? AND ?',
-    [userId, first, last],
+    'SELECT day, status FROM exercise_days WHERE patient_id = ? AND day BETWEEN ? AND ?',
+    [patientId, first, last],
   );
   return new Map(rows.map(row => [row.day, row.status]));
 }
@@ -73,8 +99,8 @@ export function signupDayOf(createdAtIso: string) {
 }
 
 /** Every day the patient exercised (complete or partial). */
-export function getExercisedDays(userId: number): Set<string> {
-  const rows = query<{ day: string }>('SELECT day FROM exercise_days WHERE user_id = ?', [userId]);
+export function getExercisedDays(patientId: string): Set<string> {
+  const rows = query<{ day: string }>('SELECT day FROM exercise_days WHERE patient_id = ?', [patientId]);
   return new Set(rows.map(row => row.day));
 }
 

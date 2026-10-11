@@ -3,6 +3,7 @@ import {
   Alert,
   FlatList,
   Image,
+  Linking,
   Modal,
   Pressable,
   StyleSheet,
@@ -11,20 +12,20 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { viewDocument } from '@react-native-documents/viewer';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Icon } from '../../components/Icon';
-import { useCurrentUser } from '../../context/AuthContext';
-import { useTherapistGate } from '../../context/TherapistGate';
+import { useAuth, useCurrentUser } from '../../context/AuthContext';
+import { handOffClinic, useTherapistGate } from '../../context/TherapistGate';
 import {
-  deleteReport,
   groupReports,
   listReports,
   type DateGroup,
   type Report,
 } from '../../db/reports';
 import type { ScreenProps } from '../../navigation/types';
+import { deleteReport, reportUrl } from '../../services/api';
 import { isImage } from '../../services/files';
+import { supabase } from '../../services/supabase';
 import { font, radius, spacing } from '../../theme';
 import { makeStyles, useTheme } from '../../theme/ThemeContext';
 import { formatLongDate } from '../../utils/date';
@@ -38,16 +39,52 @@ export function ReportsScreen({ navigation }: ScreenProps<'Reports'>) {
   const requireTherapist = useTherapistGate();
   const [groups, setGroups] = useState<DateGroup[]>([]);
   const [viewer, setViewer] = useState<Viewer>(null);
+  const { sync } = useAuth();
+  // Photos are private: they are shown through short-lived signed links.
+  const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
 
-  const load = useCallback(() => setGroups(groupReports(listReports(user.id))), [user.id]);
-  useFocusEffect(load);
+  const load = useCallback(() => {
+    const reports = listReports(user.id);
+    setGroups(groupReports(reports));
+    const photos = reports.filter(r => isImage(r.mimeType));
+    if (photos.length) {
+      supabase.storage
+        .from('patient-files')
+        .createSignedUrls(
+          photos.map(p => p.filePath),
+          3600,
+        )
+        .then(({ data }) => {
+          const urls: Record<string, string> = {};
+          data?.forEach((entry, i) => {
+            if (entry.signedUrl) {
+              urls[photos[i].id] = entry.signedUrl;
+            }
+          });
+          setPhotoUrls(urls);
+        })
+        .catch(() => {}); // offline: placeholders
+    }
+  }, [user.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      sync(true).then(load);
+    }, [load, sync]),
+  );
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
         <Pressable
           accessibilityLabel="Add document"
-          onPress={() => requireTherapist(() => navigation.navigate('AddReport'))}
+          onPress={() =>
+            requireTherapist(session => {
+              handOffClinic(session);
+              navigation.navigate('AddReport');
+            })
+          }
           hitSlop={12}
           style={styles.headerAdd}>
           <Icon name="plus" size={20} color={colors.white} />
@@ -59,32 +96,36 @@ export function ReportsScreen({ navigation }: ScreenProps<'Reports'>) {
 
   const openPdf = async (report: Report) => {
     try {
-      await viewDocument({
-        uri: report.fileUri,
-        mimeType: report.mimeType,
-        grantPermissions: 'read',
-      });
+      // Opens in the phone's PDF viewer or browser through a link valid for one hour.
+      await Linking.openURL(await reportUrl(report));
     } catch {
-      Alert.alert('Cannot open file', 'Please install a PDF viewer app to open this document.');
+      Alert.alert('Cannot open file', 'Please check your internet connection and try again.');
     }
   };
 
   const confirmDelete = (report: Report) =>
-    requireTherapist(() =>
+    requireTherapist(session =>
       Alert.alert(
         isImage(report.mimeType) ? 'Delete photo?' : 'Delete document?',
         report.title ? `"${report.title}" will be removed.` : 'This photo will be removed.',
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: 'Cancel', style: 'cancel', onPress: session.end },
           {
             text: 'Delete',
             style: 'destructive',
-            onPress: () => {
-              deleteReport(user.id, report.id);
-              load();
+            onPress: async () => {
+              try {
+                await deleteReport(session.client, report);
+                load();
+              } catch {
+                Alert.alert('Not deleted', 'Please check the internet connection and try again.');
+              } finally {
+                session.end();
+              }
             },
           },
         ],
+        { onDismiss: session.end },
       ),
     );
 
@@ -140,7 +181,13 @@ export function ReportsScreen({ navigation }: ScreenProps<'Reports'>) {
                           accessibilityLabel={`Open photo ${index + 1}`}
                           onPress={() => setViewer({ photos, index })}
                           style={styles.photoTile}>
-                          <Image source={{ uri: photo.fileUri }} style={styles.photo} />
+                          {photoUrls[photo.id] ? (
+                            <Image source={{ uri: photoUrls[photo.id] }} style={styles.photo} />
+                          ) : (
+                            <View style={[styles.photo, styles.photoPlaceholder]}>
+                              <Icon name="image" color={colors.textMuted} />
+                            </View>
+                          )}
                           <Pressable
                             accessibilityLabel={`Delete photo ${index + 1}`}
                             onPress={() => confirmDelete(photo)}
@@ -159,13 +206,21 @@ export function ReportsScreen({ navigation }: ScreenProps<'Reports'>) {
         )}
       />
 
-      <PhotoViewer viewer={viewer} onClose={() => setViewer(null)} />
+      <PhotoViewer viewer={viewer} urls={photoUrls} onClose={() => setViewer(null)} />
     </SafeAreaView>
   );
 }
 
 /** Full-screen photo viewer; swipe left/right between the photos of one group. */
-function PhotoViewer({ viewer, onClose }: { viewer: Viewer; onClose: () => void }) {
+function PhotoViewer({
+  viewer,
+  urls,
+  onClose,
+}: {
+  viewer: Viewer;
+  urls: Record<string, string>;
+  onClose: () => void;
+}) {
   const styles = useStyles();
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
@@ -202,7 +257,7 @@ function PhotoViewer({ viewer, onClose }: { viewer: Viewer; onClose: () => void 
                 setIndex(Math.round(e.nativeEvent.contentOffset.x / width))
               }
               renderItem={({ item }) => (
-                <Image source={{ uri: item.fileUri }} style={[styles.viewerImage, { width }]} />
+                <Image source={{ uri: urls[item.id] }} style={[styles.viewerImage, { width }]} />
               )}
             />
           )}
@@ -270,6 +325,7 @@ const useStyles = makeStyles(colors =>
       padding: spacing.xs,
     },
     photoTile: { width: TILE, height: TILE },
+    photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
     photo: {
       width: TILE,
       height: TILE,

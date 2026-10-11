@@ -3,7 +3,7 @@ import * as Keychain from 'react-native-keychain';
 // react-native-keychain shows the AndroidX BiometricPrompt when reading an item that
 // was stored with biometric-protected storage. The stored value itself is a marker;
 // the successful prompt is what unlocks the app.
-const serviceFor = (userId: number) => `com.painflame.therapies.biometric.${userId}`;
+const serviceFor = (userId: string) => `com.painflame.therapies.biometric.${userId}`;
 
 const prompt = {
   title: 'Unlock Painflame Clinic',
@@ -21,7 +21,7 @@ export async function isFingerprintAvailable() {
 }
 
 /** Turns fingerprint unlock on for a user. Shows the fingerprint prompt once to confirm. */
-export async function enableFingerprint(userId: number, mobile: string) {
+export async function enableFingerprint(userId: string, mobile: string) {
   const result = await Keychain.setGenericPassword(mobile, 'unlock', {
     service: serviceFor(userId),
     accessControl: Keychain.ACCESS_CONTROL.BIOMETRY_CURRENT_SET,
@@ -31,12 +31,12 @@ export async function enableFingerprint(userId: number, mobile: string) {
   return result !== false;
 }
 
-export async function disableFingerprint(userId: number) {
+export async function disableFingerprint(userId: string) {
   await Keychain.resetGenericPassword({ service: serviceFor(userId) });
 }
 
 /** Returns true only if the fingerprint matched. Failure or cancel returns false (fall back to PIN). */
-export async function unlockWithFingerprint(userId: number) {
+export async function unlockWithFingerprint(userId: string) {
   try {
     const credentials = await Keychain.getGenericPassword({
       service: serviceFor(userId),

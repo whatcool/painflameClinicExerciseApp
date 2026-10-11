@@ -5,12 +5,12 @@ import { currentStreak, longestStreak, summariseMonth } from '../src/db/tracking
 import { latestAllowedDob, toDayKey } from '../src/utils/date';
 
 const report = (id: number, reportDate: string, doctorId: number, doctorName: string): Report => ({
-  id,
+  id: String(id),
   title: `Report ${id}`,
   reportDate,
-  doctorId,
+  doctorId: String(doctorId),
   doctorName,
-  fileUri: 'file:///x',
+  filePath: 'p/reports/x.pdf',
   mimeType: 'application/pdf',
   fileName: null,
 });
@@ -25,7 +25,7 @@ describe('groupReports', () => {
     ]);
     expect(groups.map(g => g.date)).toEqual(['2026-10-05', '2026-10-01']);
     expect(groups[0].doctors.map(d => d.doctorName)).toEqual(['Dr A', 'Dr B']);
-    expect(groups[0].doctors[0].reports.map(r => r.id)).toEqual([2, 4]);
+    expect(groups[0].doctors[0].reports.map(r => r.id)).toEqual(['2', '4']);
   });
 });
 

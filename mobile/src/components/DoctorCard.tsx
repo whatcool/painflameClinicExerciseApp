@@ -29,7 +29,7 @@ export function DoctorCard({ doctor, onChange }: Props) {
     <View style={styles.card}>
       <Text style={styles.caption}>Your doctor</Text>
       <View style={styles.row}>
-        <Avatar uri={doctor.photoUri} size={76} />
+        <Avatar uri={doctor.photoUrl} size={76} />
         <View style={styles.info}>
           <Text style={styles.name}>{doctor.fullName}</Text>
           <Text style={styles.detail}>{doctor.contact}</Text>
