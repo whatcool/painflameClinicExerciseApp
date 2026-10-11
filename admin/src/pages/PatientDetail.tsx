@@ -9,6 +9,7 @@ import {
   supabase,
   upload,
 } from '../supabase';
+import { doctorLabel } from '../doctors';
 import { currentStreak, dayKey, longestStreak, monthDots } from '../tracking';
 import {
   MONTHS,
@@ -149,7 +150,7 @@ function ProfileSection({
             <option value="">— none —</option>
             {doctors.map(d => (
               <option key={d.id} value={d.id}>
-                {d.full_name}
+                {doctorLabel(d, doctors)}
               </option>
             ))}
           </select>
@@ -364,8 +365,10 @@ function ReportsSection({ patient, doctors }: { patient: Patient; doctors: Docto
     load();
   }, [load]);
 
-  const doctorName = (doctorIdValue: string) =>
-    doctors.find(d => d.id === doctorIdValue)?.full_name ?? 'Doctor';
+  const doctorName = (doctorIdValue: string) => {
+    const doctor = doctors.find(d => d.id === doctorIdValue);
+    return doctor ? doctorLabel(doctor, doctors) : 'Doctor';
+  };
 
   const add = async (event: FormEvent) => {
     event.preventDefault();
@@ -461,7 +464,7 @@ function ReportsSection({ patient, doctors }: { patient: Patient; doctors: Docto
               <option value="">— choose —</option>
               {doctors.map(d => (
                 <option key={d.id} value={d.id}>
-                  {d.full_name}
+                  {doctorLabel(d, doctors)}
                 </option>
               ))}
             </select>

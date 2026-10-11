@@ -51,7 +51,11 @@ export type Client = SupabaseClient;
 export const publicUrl = (bucket: 'exercise-media' | 'doctor-photos', path: string | null) =>
   path ? `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${encodeURI(path)}` : null;
 
-/** Uploads a local file (file:// or content://) to storage. */
+/**
+ * Uploads a local file (file:// or content://) to storage.
+ * React Native can't upload through FormData/Blob with supabase-js, so the file is read as
+ * raw bytes and sent as an ArrayBuffer (the approach the library documents for React Native).
+ */
 export async function uploadFile(
   client: Client,
   bucket: string,
@@ -59,14 +63,13 @@ export async function uploadFile(
   localUri: string,
   mimeType: string,
 ) {
-  // React Native's FormData streams the file from disk; no need to read it into memory.
-  const form = new FormData();
-  form.append('', { uri: localUri, name: path.split('/').pop(), type: mimeType } as never);
-  const { error } = await client.storage.from(bucket).upload(path, form, {
+  const bytes = await (await fetch(localUri)).arrayBuffer();
+  const { error } = await client.storage.from(bucket).upload(path, bytes, {
     contentType: mimeType,
     upsert: true,
   });
   if (error) {
+    console.warn(`Upload to ${bucket} failed`, error);
     throw error;
   }
   return path;

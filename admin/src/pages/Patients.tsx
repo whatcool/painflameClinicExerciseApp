@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { clinicPatients, errorText, must, supabase } from '../supabase';
 import type { Doctor, Gender, Patient } from '../types';
 import { SetupCodeNotice } from '../components/SetupCodeNotice';
+import { doctorLabel } from '../doctors';
 
 const MOBILE = /^[6-9]\d{9}$/;
 
@@ -39,7 +40,7 @@ export function Patients() {
   }, [load]);
 
   const doctorName = useMemo(
-    () => Object.fromEntries(doctors.map(d => [d.id, d.full_name])),
+    () => Object.fromEntries(doctors.map(d => [d.id, doctorLabel(d, doctors)])),
     [doctors],
   );
   const shown = patients.filter(
@@ -204,7 +205,7 @@ function NewPatient({ doctors, onDone }: { doctors: Doctor[]; onDone: () => void
             <option value="">— none yet —</option>
             {doctors.map(d => (
               <option key={d.id} value={d.id}>
-                {d.full_name}
+                {doctorLabel(d, doctors)}
               </option>
             ))}
           </select>
