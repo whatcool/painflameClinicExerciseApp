@@ -199,7 +199,7 @@ export function CounttillScreen({ navigation }: ScreenProps<'Counttill'>) {
             setStep('speaking');
             const hint =
               i === 0 && r === 1 && voice
-                ? ' Say go, or start, when you are ready.'
+                ? ' Say go, start, chalo, or shuru, when you are ready.'
                 : '';
             await speak(`Start rep ${r}.${hint}`, signal);
 
@@ -361,7 +361,7 @@ export function CounttillScreen({ navigation }: ScreenProps<'Counttill'>) {
   const tourSteps: TourStep[] = [
     {
       title: 'Your exercise',
-      text: 'The name of the exercise you are doing now. Exercises follow the order in your list.',
+      text: 'The exercise you are doing now, with any instructions from your therapist. Exercises follow the order in your list.',
       measure: measure(nameRef),
     },
     {
@@ -381,7 +381,7 @@ export function CounttillScreen({ navigation }: ScreenProps<'Counttill'>) {
     },
     {
       title: 'Start with your voice',
-      text: 'The app will say “Start rep 1”. When you are ready, say “Go” or “Start”. If speaking does not work, tap the counter instead.',
+      text: 'The app will say “Start rep 1”. When you are ready, say “Go”, “Start”, “Chalo” or “Shuru”. If speaking does not work, tap the counter instead.',
       measure: measure(statusRef),
     },
     {
@@ -421,7 +421,7 @@ export function CounttillScreen({ navigation }: ScreenProps<'Counttill'>) {
     if (phase !== 'running') {
       return {
         icon: 'mic' as const,
-        text: 'Say “Go” or “Start” to begin each rep',
+        text: 'Say “Go”, “Start”, “Chalo” or “Shuru” to begin each rep',
       };
     }
     switch (step) {
@@ -429,7 +429,7 @@ export function CounttillScreen({ navigation }: ScreenProps<'Counttill'>) {
         return voiceOn
           ? {
               icon: 'mic' as const,
-              text: 'Say “Go” or “Start”  ·  or tap the counter',
+              text: 'Say “Go”, “Start”, “Chalo” or “Shuru”  ·  or tap the counter',
             }
           : { icon: 'play' as const, text: 'Tap the counter to start' };
       case 'waitingTap':
@@ -487,6 +487,9 @@ export function CounttillScreen({ navigation }: ScreenProps<'Counttill'>) {
             <View ref={nameRef} collapsable={false}>
               {upNext ? <Text style={styles.upNext}>Up next</Text> : null}
               <Text style={styles.name}>{exercise.name}</Text>
+              {exercise.description ? (
+                <Text style={styles.description}>{exercise.description}</Text>
+              ) : null}
             </View>
 
             <View ref={videoRef} collapsable={false} style={styles.video}>
@@ -665,6 +668,17 @@ const useStyles = makeStyles(colors =>
     },
     progressFill: { height: 6, backgroundColor: colors.primary },
     content: { padding: spacing.md, gap: spacing.md },
+    description: {
+      fontSize: font.body,
+      color: colors.text,
+      lineHeight: 25,
+      marginTop: spacing.sm,
+      padding: spacing.md,
+      backgroundColor: colors.surface,
+      borderRadius: radius.md,
+      borderLeftWidth: 4,
+      borderLeftColor: colors.primary,
+    },
     name: {
       fontSize: font.title,
       fontWeight: '800',

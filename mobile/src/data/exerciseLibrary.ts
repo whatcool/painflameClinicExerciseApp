@@ -9,6 +9,7 @@ import { query, run, transaction } from '../db/database';
 export type LibraryExercise = {
   id: string;
   name: string;
+  description: string; // clinic's instructions, shown during the session
   images: ImageSourcePropType[];
   thumbnailIndex: number; // which entry of `images` is the thumbnail
   videoUrl: string | null;
@@ -18,6 +19,7 @@ export type LibraryExercise = {
 type ExerciseRow = {
   id: string;
   name: string;
+  description: string;
   image_urls: string;
   thumbnail_index: number;
   video_url: string | null;
@@ -27,6 +29,7 @@ type ExerciseRow = {
 export type CachedExercise = {
   id: string;
   name: string;
+  description: string;
   imageUrls: string[];
   thumbnailIndex: number;
   videoUrl: string | null;
@@ -36,6 +39,7 @@ export type CachedExercise = {
 const toExercise = (row: ExerciseRow): LibraryExercise => ({
   id: row.id,
   name: row.name,
+  description: row.description,
   images: (JSON.parse(row.image_urls) as string[]).map(uri => ({ uri })),
   thumbnailIndex: row.thumbnail_index,
   videoUrl: row.video_url,
@@ -47,9 +51,17 @@ export function cacheLibrary(exercises: CachedExercise[]) {
     run('DELETE FROM exercises');
     for (const e of exercises) {
       run(
-        `INSERT INTO exercises (id, name, image_urls, thumbnail_index, video_url, active)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [e.id, e.name, JSON.stringify(e.imageUrls), e.thumbnailIndex, e.videoUrl, e.active ? 1 : 0],
+        `INSERT INTO exercises (id, name, description, image_urls, thumbnail_index, video_url, active)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          e.id,
+          e.name,
+          e.description,
+          JSON.stringify(e.imageUrls),
+          e.thumbnailIndex,
+          e.videoUrl,
+          e.active ? 1 : 0,
+        ],
       );
     }
   });

@@ -68,6 +68,7 @@ async function doSync(patientId: string) {
     must<ServerExercise[]>(exercises).map(e => ({
       id: e.id,
       name: e.name,
+      description: e.description ?? '',
       imageUrls: e.image_paths.map(path => publicUrl('exercise-media', path)!),
       thumbnailIndex: e.thumbnail_index,
       videoUrl: publicUrl('exercise-media', e.video_path),
@@ -134,6 +135,7 @@ export type ServerDoctor = {
 type ServerExercise = {
   id: string;
   name: string;
+  description?: string; // added in migration 20261012; older servers lack it
   image_paths: string[];
   thumbnail_index: number;
   video_path: string | null;

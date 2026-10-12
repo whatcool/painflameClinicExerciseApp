@@ -27,6 +27,7 @@ export type Doctor = {
 export type Exercise = {
   id: string;
   name: string;
+  description: string;
   image_paths: string[];
   thumbnail_index: number;
   video_path: string | null;

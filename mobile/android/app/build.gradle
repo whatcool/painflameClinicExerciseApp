@@ -111,6 +111,9 @@ android {
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
+            // Installs as a separate app next to the release build (com.painflame.therapies.debug),
+            // so switching between them never needs an uninstall.
+            applicationIdSuffix ".debug"
         }
         release {
             // Signed with the Painflame release key so the APK installs on devices.

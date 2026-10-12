@@ -127,6 +127,8 @@ const MIGRATIONS: string[][] = [
       PRIMARY KEY (patient_id, day)
     )`,
   ],
+  // v4: the clinic's written instructions for each exercise.
+  ["ALTER TABLE exercises ADD COLUMN description TEXT NOT NULL DEFAULT ''"],
 ];
 
 function migrate(database: DB) {

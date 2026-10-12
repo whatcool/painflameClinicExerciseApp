@@ -1,0 +1,4 @@
+<resources>
+    <!-- Debug builds install next to the release app (see applicationIdSuffix), so give them a different name. -->
+    <string name="app_name">Painflame Debug</string>
+</resources>

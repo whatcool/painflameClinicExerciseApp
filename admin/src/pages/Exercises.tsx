@@ -107,6 +107,7 @@ function ExerciseForm({
   onDone: () => void;
 }) {
   const [name, setName] = useState(exercise?.name ?? '');
+  const [description, setDescription] = useState(exercise?.description ?? '');
   const [images, setImages] = useState<string[]>(exercise?.image_paths ?? []);
   const [thumbnail, setThumbnail] = useState(exercise?.thumbnail_index ?? 0);
   const [videoPath, setVideoPath] = useState(exercise?.video_path ?? null);
@@ -162,6 +163,7 @@ function ExerciseForm({
     }
     const fields = {
       name: name.trim(),
+      description: description.trim(),
       image_paths: images,
       thumbnail_index: Math.min(thumbnail, Math.max(images.length - 1, 0)),
       video_path: videoPath,
@@ -192,6 +194,17 @@ function ExerciseForm({
           <input value={id} disabled />
         </label>
       </div>
+
+      <label style={{ marginTop: 16 }}>
+        Instructions for the patient (shown under the exercise name, above the video)
+        <textarea
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          rows={4}
+          maxLength={1000}
+          placeholder="e.g. Keep your back flat on the floor. Breathe out while lifting. Stop if you feel sharp pain."
+        />
+      </label>
 
       <h2 style={{ marginTop: 20 }}>Images</h2>
       <p className="muted">Click an image to make it the thumbnail shown in exercise lists.</p>

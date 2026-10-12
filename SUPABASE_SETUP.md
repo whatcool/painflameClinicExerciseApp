@@ -87,3 +87,16 @@ the `admin` folder with build command `npm run build`, output folder `dist`, and
   `npx supabase db dump --linked -f backup.sql` (and keep the file safe), or upgrade to Pro ($25/month).
 - **Who sees what**: patients only ever see their own data; the clinic login sees everything.
   These rules are enforced by the database itself (row level security), not just by the app.
+
+## Applying later updates
+
+When a new file appears in `supabase/migrations/`, run it once in **SQL Editor** (paste the file,
+click **Run**), in date order. The migrations so far:
+
+| File | What it adds |
+|---|---|
+| `20261011000000_init.sql` | Everything (initial setup) |
+| `20261012000000_exercise_description.sql` | “Instructions for the patient” text on each exercise |
+
+If an Edge Function in `supabase/functions/` changed, redeploy it with
+`npx supabase functions deploy <name>`.

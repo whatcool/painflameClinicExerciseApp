@@ -89,7 +89,7 @@ type WaitHandlers = {
 };
 
 /**
- * Waits until the patient says "Go"/"Start" or taps the screen.
+ * Waits until the patient says "Go"/"Start"/"Chalo"/"Shuru" or taps the screen.
  * Listens in up to 3 windows of 10 seconds; if nothing is heard, calls onNoSpeech
  * and then waits for a tap only.
  */
@@ -179,7 +179,7 @@ export async function isVoiceAvailable() {
     {
       title: 'Use your voice',
       message:
-        'Say “Go” or “Start” to begin each rep, so you don’t have to touch the phone.',
+        'Say “Go”, “Start”, “Chalo” or “Shuru” to begin each rep, so you don’t have to touch the phone.',
       buttonPositive: 'Allow',
       buttonNegative: 'Not now',
     },
