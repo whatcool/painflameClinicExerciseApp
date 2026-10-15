@@ -1,0 +1,5 @@
+<resources>
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- Splash screen background; matches the app's page background. -->
+    <color name="splash_background">#F6F5FA</color>
+</resources>

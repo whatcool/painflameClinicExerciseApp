@@ -3,12 +3,15 @@ import {
   Alert,
   Modal,
   Pressable,
+  RefreshControl,
+  ScrollView,
   StyleSheet,
   Switch,
   Text,
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -17,6 +20,7 @@ import { Button } from '../../components/Button';
 import { DashboardCarousel } from '../../components/DashboardCarousel';
 import { DoctorCard } from '../../components/DoctorCard';
 import { DoctorLibraryModal } from '../../components/DoctorLibraryModal';
+import { ExitConfirm } from '../../components/ExitConfirm';
 import { Icon } from '../../components/Icon';
 import { Logo } from '../../components/Logo';
 import { StreakBadge } from '../../components/StreakBadge';
@@ -100,6 +104,24 @@ export function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
     setDoctorState(user.doctorId !== null ? getDoctor(user.doctorId) : null);
   }, [user]);
 
+  // Pull down to refresh: fetch the latest from the clinic (list, doctor, reports, tracking).
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    const ok = await sync(true);
+    refreshUser();
+    setRefreshing(false);
+    if (!ok) {
+      Alert.alert(
+        'Could not refresh',
+        'Showing saved data. Please check your internet connection.',
+      );
+    }
+  }, [sync, refreshUser]);
+
+  // Sections slide in one after another when the dashboard opens.
+  const enter = (step: number) => FadeInDown.delay(step * 70).duration(450);
+
   const closeLibrary = () => {
     setLibraryOpen(false);
     endClinic();
@@ -107,8 +129,19 @@ export function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.content}>
-        <View style={styles.topBar}>
+      <ExitConfirm />
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            progressBackgroundColor={colors.surface}
+          />
+        }
+      >
+        <Animated.View entering={enter(0)} style={styles.topBar}>
           <Logo width={140} />
           <Pressable
             accessibilityRole="button"
@@ -124,9 +157,9 @@ export function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
               strokeWidth={2.5}
             />
           </Pressable>
-        </View>
+        </Animated.View>
 
-        <View style={styles.greetingRow}>
+        <Animated.View entering={enter(1)} style={styles.greetingRow}>
           <View style={styles.greetingText}>
             <Text style={styles.greeting}>{greeting()},</Text>
             <Text style={styles.name} numberOfLines={1}>
@@ -134,53 +167,59 @@ export function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
             </Text>
           </View>
           <StreakBadge days={streak} />
-        </View>
+        </Animated.View>
 
-        <DoctorCard
-          doctor={doctor}
-          onChange={() =>
-            requireTherapist(session => {
-              setClinic(session);
-              setLibraryOpen(true);
-            })
-          }
-        />
-
-        <Button
-          title="START"
-          large
-          style={styles.start}
-          onPress={() => {
-            if (exercises.length === 0) {
-              Alert.alert(
-                'No exercises yet',
-                'Add exercises to your list before starting.',
-                [
-                  { text: 'Not now', style: 'cancel' },
-                  {
-                    text: 'Create list',
-                    onPress: () =>
-                      navigation.navigate('ExerciseList', { edit: true }),
-                  },
-                ],
-              );
-              return;
+        <Animated.View entering={enter(2)}>
+          <DoctorCard
+            doctor={doctor}
+            onChange={() =>
+              requireTherapist(session => {
+                setClinic(session);
+                setLibraryOpen(true);
+              })
             }
-            navigation.navigate('Counttill');
-          }}
-        />
+          />
+        </Animated.View>
+
+        <Animated.View entering={enter(3)}>
+          <Button
+            title="START"
+            large
+            style={styles.start}
+            onPress={() => {
+              if (exercises.length === 0) {
+                Alert.alert(
+                  'No exercises yet',
+                  'Add exercises to your list before starting.',
+                  [
+                    { text: 'Not now', style: 'cancel' },
+                    {
+                      text: 'Create list',
+                      onPress: () =>
+                        navigation.navigate('ExerciseList', { edit: true }),
+                    },
+                  ],
+                );
+                return;
+              }
+              navigation.navigate('Counttill');
+            }}
+          />
+        </Animated.View>
 
         {month && (
-          <DashboardCarousel
-            exercises={exercises}
-            month={month}
-            onEditExercises={() =>
-              navigation.navigate('ExerciseList', { edit: true })
-            }
-            onOpenStreak={() => navigation.navigate('Tracking')}
-          />
+          <Animated.View entering={enter(4)} style={styles.carousel}>
+            <DashboardCarousel
+              exercises={exercises}
+              month={month}
+              onEditExercises={() =>
+                navigation.navigate('ExerciseList', { edit: true })
+              }
+              onOpenStreak={() => navigation.navigate('Tracking')}
+            />
+          </Animated.View>
         )}
-      </View>
+      </ScrollView>
 
       <Modal
         visible={menuOpen}
@@ -262,7 +301,13 @@ export function DashboardScreen({ navigation }: ScreenProps<'Dashboard'>) {
 const useStyles = makeStyles(colors =>
   StyleSheet.create({
     safe: { flex: 1, backgroundColor: colors.background },
-    content: { flex: 1, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
+    // flexGrow lets the carousel fill the rest of the screen inside the pull-to-refresh scroll.
+    content: {
+      flexGrow: 1,
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.sm,
+    },
+    carousel: { flex: 1, minHeight: 260 },
     topBar: {
       flexDirection: 'row',
       alignItems: 'center',

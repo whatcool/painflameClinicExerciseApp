@@ -47,16 +47,15 @@ describe('summariseMonth', () => {
   });
 });
 
-describe('PIN hashing', () => {
-  it('stores a salted hash, never the PIN, and verifies correctly', async () => {
-    const { hashPin, verifyPin } = require('../src/security/pin');
-    const first = await hashPin('123456', 1000);
-    const second = await hashPin('123456', 1000);
-    expect(first.hash).not.toContain('123456');
-    expect(first.salt).not.toBe(second.salt);
-    expect(first.hash).not.toBe(second.hash);
-    expect(await verifyPin('123456', first)).toBe(true);
-    expect(await verifyPin('654321', first)).toBe(false);
+describe('Google sign-in nonce', () => {
+  it('is random, and Google gets only its SHA-256', () => {
+    const { makeNonce } = require('../src/services/google');
+    const { createHash } = require('crypto');
+    const first = makeNonce();
+    const second = makeNonce();
+    expect(first.raw).toMatch(/^[0-9a-f]{64}$/);
+    expect(first.raw).not.toBe(second.raw);
+    expect(first.hashed).toBe(createHash('sha256').update(first.raw).digest('hex'));
   });
 });
 

@@ -2,7 +2,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 export type RootStackParamList = {
   Login: undefined;
-  Activate: undefined;
+  LinkAccount: undefined;
   Lock: undefined;
   Dashboard: undefined;
   Profile: undefined;

@@ -1,7 +1,10 @@
 package com.painflameapp.coach
 
+import android.content.Context
 import android.content.Intent
+import android.media.AudioManager
 import android.media.MediaPlayer
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -60,6 +63,12 @@ class NativeCoachModule(private val context: ReactApplicationContext) :
   // Some phones (often Android 11/12) have no offline speech pack: then use the online one.
   private var preferOffline = true
   private var language = "en-IN"
+  // Android 12+ phones with Google's on-device speech service: no beeps at all.
+  private var useOnDevice =
+      Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+          SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+  // Streams we muted to hide the recogniser's start/stop beeps (restored afterwards).
+  private val mutedStreams = mutableListOf<Int>()
   private val listenTimeout = Runnable { finishListening("timeout") }
   private val restartRunnable = Runnable { startRecognizer() }
 
@@ -115,6 +124,7 @@ class NativeCoachModule(private val context: ReactApplicationContext) :
 
   override fun speak(text: String, promise: Promise) {
     main.post {
+      restoreBeeps()
       val run = {
         val engine = tts
         if (ttsFailed || engine == null) {
@@ -178,10 +188,11 @@ class NativeCoachModule(private val context: ReactApplicationContext) :
     if (listenPromise == null) return
     val active =
         recognizer
-            ?: SpeechRecognizer.createSpeechRecognizer(context).also {
+            ?: createRecognizer().also {
               it.setRecognitionListener(listener)
               recognizer = it
             }
+    if (!useOnDevice) muteBeeps()
     val remaining = (listenDeadline - SystemClock.elapsedRealtime()).coerceAtLeast(1000L)
     val intent =
         Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -200,6 +211,45 @@ class NativeCoachModule(private val context: ReactApplicationContext) :
         }
     sessionStartedAt = SystemClock.elapsedRealtime()
     active.startListening(intent)
+  }
+
+  private fun createRecognizer(): SpeechRecognizer =
+      if (useOnDevice && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+      } else {
+        SpeechRecognizer.createSpeechRecognizer(context)
+      }
+
+  /**
+   * Google's recogniser beeps every time it starts and stops, and it stops on its own about
+   * every 10 seconds. While listening, mute the sound streams it beeps on; [restoreBeeps]
+   * puts back exactly what we changed. (Speech and the whistle are never played while muted.)
+   */
+  private fun muteBeeps() {
+    if (mutedStreams.isNotEmpty()) return
+    val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    for (stream in
+        listOf(AudioManager.STREAM_MUSIC, AudioManager.STREAM_NOTIFICATION, AudioManager.STREAM_SYSTEM)) {
+      try {
+        if (!audio.isStreamMute(stream)) {
+          audio.adjustStreamVolume(stream, AudioManager.ADJUST_MUTE, 0)
+          mutedStreams.add(stream)
+        }
+      } catch (_: SecurityException) {
+        // Do Not Disturb can forbid changing some streams; a beep is better than a crash.
+      }
+    }
+  }
+
+  private fun restoreBeeps() {
+    if (mutedStreams.isEmpty()) return
+    val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    for (stream in mutedStreams) {
+      try {
+        audio.adjustStreamVolume(stream, AudioManager.ADJUST_UNMUTE, 0)
+      } catch (_: SecurityException) {}
+    }
+    mutedStreams.clear()
   }
 
   /**
@@ -265,8 +315,17 @@ class NativeCoachModule(private val context: ReactApplicationContext) :
             SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> restartIfTimeLeft()
             ERROR_LANGUAGE_NOT_SUPPORTED,
             ERROR_LANGUAGE_UNAVAILABLE -> {
-              // No offline pack for Indian English: try online, then plain English.
-              if (preferOffline) preferOffline = false else language = "en-US"
+              if (useOnDevice) {
+                // The on-device service lacks the language pack: use the regular recogniser.
+                useOnDevice = false
+                recognizer?.destroy()
+                recognizer = null
+              } else if (preferOffline) {
+                // No offline pack for Indian English: try online, then plain English.
+                preferOffline = false
+              } else {
+                language = "en-US"
+              }
               restartIfTimeLeft()
             }
             SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> {
@@ -293,6 +352,7 @@ class NativeCoachModule(private val context: ReactApplicationContext) :
       it.destroy()
     }
     recognizer = null
+    restoreBeeps()
     val promise = listenPromise
     listenPromise = null
     promise?.resolve(result)
@@ -304,6 +364,7 @@ class NativeCoachModule(private val context: ReactApplicationContext) :
 
   override fun playSound(name: String, promise: Promise) {
     main.post {
+      restoreBeeps()
       stopSound()
       val resId =
           when (name) {

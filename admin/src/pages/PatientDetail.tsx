@@ -66,7 +66,11 @@ export function PatientDetail() {
       <ExerciseListSection patient={patient} library={library} onPermissionChanged={loadPatient} />
       <ReportsSection patient={patient} doctors={doctors} />
       <TrackingSection patient={patient} />
-      <AccountSection patient={patient} onDeleted={() => navigate('/patients')} />
+      <AccountSection
+        patient={patient}
+        onDeleted={() => navigate('/patients')}
+        onChanged={loadPatient}
+      />
     </>
   );
 }
@@ -591,19 +595,47 @@ function TrackingSection({ patient }: { patient: Patient }) {
 
 // --- Account -------------------------------------------------------------------
 
-function AccountSection({ patient, onDeleted }: { patient: Patient; onDeleted: () => void }) {
+function AccountSection({
+  patient,
+  onDeleted,
+  onChanged,
+}: {
+  patient: Patient;
+  onDeleted: () => void;
+  onChanged: () => void;
+}) {
   const [code, setCode] = useState<{ setup_code: string; expires_at: string } | null>(null);
   const [status, setStatus] = useState('');
 
   const newCode = async () => {
     if (
       patient.activated_at &&
-      !confirm('Create a new code? The patient will use it to set a new PIN.')
+      !confirm(
+        'Create a new code? The patient uses it to link a new Google account (for example on a new phone).',
+      )
     ) {
       return;
     }
     try {
       setCode(await clinicPatients({ action: 'new-code', patient_id: patient.id }));
+    } catch (e) {
+      setStatus(errorText(e));
+    }
+  };
+
+  /** Removes the Google link; the patient then needs a new code to link an account again. */
+  const unlinkGoogle = async () => {
+    if (!confirm(`Unlink ${patient.google_email ?? 'the Google account'} from ${patient.full_name}?`)) {
+      return;
+    }
+    try {
+      must(
+        await supabase
+          .from('patients')
+          .update({ google_user_id: null, google_email: null })
+          .eq('id', patient.id),
+      );
+      onChanged();
     } catch (e) {
       setStatus(errorText(e));
     }
@@ -634,12 +666,25 @@ function AccountSection({ patient, onDeleted }: { patient: Patient; onDeleted: (
             }.`
           : 'Not activated yet: the patient still needs to enter the setup code in the app.'}
       </p>
+      <p>
+        Google account:{' '}
+        {patient.google_email ? (
+          <>
+            <strong>{patient.google_email}</strong>{' '}
+            <button className="link" onClick={unlinkGoogle}>
+              Unlink
+            </button>
+          </>
+        ) : (
+          <span className="muted">not linked yet</span>
+        )}
+      </p>
       {code && (
         <SetupCodeNotice code={code.setup_code} expiresAt={code.expires_at} mobile={patient.mobile} />
       )}
       <div className="row">
         <button className="secondary" onClick={newCode}>
-          {patient.activated_at ? 'Forgot PIN: create new code' : 'Create new setup code'}
+          {patient.activated_at ? 'New phone / Google account: create new code' : 'Create new setup code'}
         </button>
         <span className="spacer" />
         <button className="danger" onClick={remove}>

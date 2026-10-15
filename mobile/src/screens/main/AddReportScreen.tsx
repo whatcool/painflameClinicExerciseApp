@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../../components/Avatar';
+import { BusyOverlay } from '../../components/BusyOverlay';
 import { Button } from '../../components/Button';
 import { DateField } from '../../components/DateField';
 import { DoctorLibraryModal } from '../../components/DoctorLibraryModal';
@@ -115,6 +116,7 @@ export function AddReportScreen({ navigation }: ScreenProps<'AddReport'>) {
 
   return (
     <Screen>
+      <BusyOverlay visible={saving} message="Uploading the document…" />
       <Text style={fieldStyles.label}>Document</Text>
       <View style={styles.choiceRow}>
         <Pressable

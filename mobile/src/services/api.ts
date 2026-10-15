@@ -4,6 +4,7 @@ import { cacheDoctor, cacheDoctors, type Doctor } from '../db/doctors';
 import { cacheExerciseList, type PatientExercise } from '../db/exerciseList';
 import { removeCachedReport, type Report } from '../db/reports';
 import { updateCachedPatient, type Gender } from '../db/users';
+import NativePlatform from '../../specs/NativePlatform';
 import type { PickedFile } from './files';
 import { fileExtension, supabase, uploadFile, type Client } from './supabase';
 import { signedPhotoUrl, syncPatient, toDoctor, type ServerDoctor } from './sync';
@@ -51,6 +52,19 @@ export async function reportUrl(report: Report) {
     throw error ?? new Error('No link');
   }
   return data.signedUrl;
+}
+
+/** Saves a report to the phone's Downloads/Painflame folder (with a notification). */
+export async function downloadReport(report: Report, photoNumber?: number) {
+  if (!NativePlatform) {
+    throw new Error('Downloads are not available');
+  }
+  const extension = fileExtension(report.fileName, report.mimeType);
+  const base = report.title.trim()
+    ? report.title.trim()
+    : `Painflame photo ${report.reportDate}${photoNumber ? ` ${photoNumber}` : ''}`;
+  const name = base.toLowerCase().endsWith(`.${extension}`) ? base : `${base}.${extension}`;
+  await NativePlatform.downloadFile(await reportUrl(report), name, report.mimeType);
 }
 
 // --- Exercise list ---

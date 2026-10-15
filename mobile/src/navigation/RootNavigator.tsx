@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
-import { ActivityIndicator, StatusBar, StyleSheet, View } from 'react-native';
+import { StatusBar, StyleSheet, View } from 'react-native';
 import { DarkTheme, DefaultTheme, NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import {
+  createNativeStackNavigator,
+  type NativeStackNavigationOptions,
+} from '@react-navigation/native-stack';
+import { ExerciseDoodle } from '../components/ExerciseDoodle';
+import { Logo } from '../components/Logo';
 import { useAuth } from '../context/AuthContext';
 import { LockScreen } from '../screens/auth/LockScreen';
 import { LoginScreen } from '../screens/auth/LoginScreen';
-import { ActivateScreen } from '../screens/auth/ActivateScreen';
+import { LinkAccountScreen } from '../screens/auth/LinkAccountScreen';
 import { AddReportScreen } from '../screens/main/AddReportScreen';
 import { CounttillScreen } from '../screens/main/CounttillScreen';
 import { SessionCompleteScreen } from '../screens/main/SessionCompleteScreen';
@@ -22,9 +27,12 @@ import type { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+const fadeNoHeader: NativeStackNavigationOptions = { headerShown: false, animation: 'fade' };
+
 // Screens drawn on the page background (no indigo header) need dark status-bar icons.
 const SCREENS_WITHOUT_HEADER = new Set<keyof RootStackParamList>([
   'Login',
+  'LinkAccount',
   'Lock',
   'Dashboard',
   'Counttill',
@@ -55,8 +63,12 @@ export function RootNavigator() {
 
   if (status === 'loading') {
     return (
+      // Same background as the splash screen, so the hand-over is seamless.
       <View style={styles.loading}>
-        <ActivityIndicator size="large" color={colors.primary} />
+        <Logo width={240} />
+        <View style={styles.spinner}>
+          <ExerciseDoodle message="Getting things ready…" />
+        </View>
       </View>
     );
   }
@@ -81,6 +93,10 @@ export function RootNavigator() {
             headerStyle: { backgroundColor: colors.header },
             headerTintColor: colors.white,
             headerTitleStyle: { fontSize: font.large, fontWeight: '700' },
+            // Smooth sliding page transitions; screens that replace each other fade.
+            animation: 'ios_from_right',
+            animationTypeForReplace: 'push',
+            contentStyle: { backgroundColor: colors.background },
           }}
         >
           {status === 'signedOut' && (
@@ -88,20 +104,22 @@ export function RootNavigator() {
               <Stack.Screen
                 name="Login"
                 component={LoginScreen}
-                options={{ headerShown: false }}
-              />
-              <Stack.Screen
-                name="Activate"
-                component={ActivateScreen}
-                options={{ title: 'Activate account' }}
+                options={fadeNoHeader}
               />
             </>
+          )}
+          {status === 'needsLink' && (
+            <Stack.Screen
+              name="LinkAccount"
+              component={LinkAccountScreen}
+              options={fadeNoHeader}
+            />
           )}
           {status === 'locked' && (
             <Stack.Screen
               name="Lock"
               component={LockScreen}
-              options={{ headerShown: false }}
+              options={fadeNoHeader}
             />
           )}
           {status === 'signedIn' && (
@@ -109,7 +127,7 @@ export function RootNavigator() {
               <Stack.Screen
                 name="Dashboard"
                 component={DashboardScreen}
-                options={{ headerShown: false }}
+                options={fadeNoHeader}
               />
               <Stack.Screen name="Profile" component={ProfileScreen} />
               <Stack.Screen name="Tracking" component={TrackingScreen} />
@@ -127,12 +145,16 @@ export function RootNavigator() {
               <Stack.Screen
                 name="Counttill"
                 component={CounttillScreen}
-                options={{ headerShown: false, gestureEnabled: false }}
+                options={{
+                  headerShown: false,
+                  gestureEnabled: false,
+                  animation: 'fade_from_bottom',
+                }}
               />
               <Stack.Screen
                 name="SessionComplete"
                 component={SessionCompleteScreen}
-                options={{ headerShown: false }}
+                options={fadeNoHeader}
               />
             </>
           )}
@@ -149,6 +171,7 @@ export function RootNavigator() {
 const useStyles = makeStyles(colors =>
   StyleSheet.create({
     flex: { flex: 1 },
+    spinner: { marginTop: 32 },
     loading: {
       flex: 1,
       alignItems: 'center',

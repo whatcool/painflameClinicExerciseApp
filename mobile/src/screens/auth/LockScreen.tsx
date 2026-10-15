@@ -2,26 +2,29 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/Button';
+import { BusyOverlay } from '../../components/BusyOverlay';
+import { ExitConfirm } from '../../components/ExitConfirm';
+import { GoogleButton } from '../../components/GoogleButton';
+import { Icon } from '../../components/Icon';
 import { Logo } from '../../components/Logo';
 import { Screen } from '../../components/Screen';
-import { TextField } from '../../components/TextField';
-import { useAuth, useCurrentUser } from '../../context/AuthContext';
+import { authErrorMessage, useAuth, useCurrentUser } from '../../context/AuthContext';
 import { unlockWithFingerprint } from '../../security/biometrics';
-import { PIN_LENGTH } from '../../security/pin';
 import { font, spacing } from '../../theme';
-import { makeStyles } from '../../theme/ThemeContext';
-import { digitsOnly, firstName } from '../../utils/validation';
+import { makeStyles, useTheme } from '../../theme/ThemeContext';
+import { firstName } from '../../utils/validation';
 
-/** Shown on app open when fingerprint unlock is on. Falls back to the PIN. */
+/** Shown on app open when fingerprint unlock is on. Falls back to the Google account. */
 export function LockScreen() {
   const styles = useStyles();
-  const { unlock, unlockWithPin, logout } = useAuth();
+  const { colors } = useTheme();
+  const { unlock, unlockWithGoogle, logout } = useAuth();
   const user = useCurrentUser();
-  const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   const tryFingerprint = useCallback(async () => {
+    setError('');
     if (await unlockWithFingerprint(user.id)) {
       unlock();
     }
@@ -31,53 +34,39 @@ export function LockScreen() {
     tryFingerprint();
   }, [tryFingerprint]);
 
-  const submitPin = async () => {
-    if (pin.length !== PIN_LENGTH) {
-      setError(`Enter your ${PIN_LENGTH}-digit PIN`);
-      return;
-    }
+  const tryGoogle = async () => {
     setBusy(true);
-    const ok = await unlockWithPin(pin);
+    setError('');
+    const result = await unlockWithGoogle();
     setBusy(false);
-    if (ok) {
-      unlock();
-    } else {
-      setError('Incorrect PIN');
-      setPin('');
+    if (!result.ok) {
+      setError(authErrorMessage(result) ?? '');
     }
   };
 
   return (
     <Screen edges={['top', 'bottom']} contentStyle={styles.content}>
+      <ExitConfirm />
+      <BusyOverlay visible={busy} message="Checking your Google account…" />
       <Logo width={200} />
       <View style={styles.avatar}>
         <Avatar uri={user.photoUrl} size={96} />
       </View>
       <Text style={styles.name}>Hello, {firstName(user.fullName)}</Text>
-      <Text style={styles.subtitle}>Enter your PIN to continue</Text>
-      <TextField
-        label="PIN"
-        value={pin}
-        onChangeText={text => {
-          setPin(digitsOnly(text, PIN_LENGTH));
-          setError('');
-        }}
-        keyboardType="number-pad"
-        secureTextEntry
-        maxLength={PIN_LENGTH}
-        error={error}
-        onSubmitEditing={submitPin}
-        style={styles.pin}
-      />
-      <Button title="Unlock" onPress={submitPin} loading={busy} />
-      <Button
-        title="Use fingerprint"
-        variant="secondary"
-        onPress={tryFingerprint}
-        style={styles.secondary}
-      />
+      <Text style={styles.subtitle}>Unlock with your fingerprint</Text>
+
+      <Button title="Use fingerprint" onPress={tryFingerprint} large style={styles.fingerprint} />
+      <View style={styles.orRow}>
+        <View style={styles.line} />
+        <Text style={styles.or}>or</Text>
+        <View style={styles.line} />
+      </View>
+      <GoogleButton title="Unlock with Google" onPress={tryGoogle} loading={busy} />
+      {error ? <Text style={styles.error}>{error}</Text> : null}
+
       <Pressable onPress={logout} hitSlop={10} style={styles.switch}>
-        <Text style={styles.switchText}>Not you? Log in with another account</Text>
+        <Icon name="logout" size={18} color={colors.primary} />
+        <Text style={styles.switchText}>Not you? Log out</Text>
       </Pressable>
     </Screen>
   );
@@ -100,9 +89,18 @@ const useStyles = makeStyles(colors =>
       textAlign: 'center',
       marginBottom: spacing.lg,
     },
-    pin: { textAlign: 'center', letterSpacing: 8 },
-    secondary: { marginTop: spacing.sm },
-    switch: { marginTop: spacing.lg, alignItems: 'center' },
+    fingerprint: { marginBottom: spacing.md },
+    orRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
+    line: { flex: 1, height: 1, backgroundColor: colors.border },
+    or: { color: colors.textMuted, fontSize: font.small },
+    error: { color: colors.danger, fontSize: font.body, marginTop: spacing.md, textAlign: 'center' },
+    switch: {
+      marginTop: spacing.xl,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: spacing.xs,
+    },
     switchText: { color: colors.primary, fontSize: font.body },
   }),
 );

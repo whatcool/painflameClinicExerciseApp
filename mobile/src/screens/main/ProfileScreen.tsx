@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Avatar } from '../../components/Avatar';
+import { BusyOverlay } from '../../components/BusyOverlay';
 import { Button } from '../../components/Button';
 import { DateField } from '../../components/DateField';
 import { GenderPicker } from '../../components/GenderPicker';
@@ -101,6 +102,10 @@ export function ProfileScreen() {
 
   return (
     <Screen>
+      <BusyOverlay
+        visible={saving || uploading}
+        message={uploading ? 'Uploading your photo…' : 'Saving your profile…'}
+      />
       <View style={styles.photoBlock}>
         <Avatar uri={user.photoUrl} size={130} />
         <Pressable

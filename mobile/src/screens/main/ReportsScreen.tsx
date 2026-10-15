@@ -1,4 +1,9 @@
-import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from 'react';
 import {
   Alert,
   FlatList,
@@ -23,7 +28,9 @@ import {
   type Report,
 } from '../../db/reports';
 import type { ScreenProps } from '../../navigation/types';
-import { deleteReport, reportUrl } from '../../services/api';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ZoomableImage } from '../../components/ZoomableImage';
+import { deleteReport, downloadReport, reportUrl } from '../../services/api';
 import { isImage } from '../../services/files';
 import { supabase } from '../../services/supabase';
 import { font, radius, spacing } from '../../theme';
@@ -86,7 +93,8 @@ export function ReportsScreen({ navigation }: ScreenProps<'Reports'>) {
             })
           }
           hitSlop={12}
-          style={styles.headerAdd}>
+          style={styles.headerAdd}
+        >
           <Icon name="plus" size={20} color={colors.white} />
           <Text style={styles.headerAddText}>Add</Text>
         </Pressable>
@@ -99,7 +107,25 @@ export function ReportsScreen({ navigation }: ScreenProps<'Reports'>) {
       // Opens in the phone's PDF viewer or browser through a link valid for one hour.
       await Linking.openURL(await reportUrl(report));
     } catch {
-      Alert.alert('Cannot open file', 'Please check your internet connection and try again.');
+      Alert.alert(
+        'Cannot open file',
+        'Please check your internet connection and try again.',
+      );
+    }
+  };
+
+  const download = async (report: Report, photoNumber?: number) => {
+    try {
+      await downloadReport(report, photoNumber);
+      Alert.alert(
+        'Downloading',
+        'You will find it in Downloads → Painflame on this phone.',
+      );
+    } catch {
+      Alert.alert(
+        'Download failed',
+        'Please check your internet connection and try again.',
+      );
     }
   };
 
@@ -107,7 +133,9 @@ export function ReportsScreen({ navigation }: ScreenProps<'Reports'>) {
     requireTherapist(session =>
       Alert.alert(
         isImage(report.mimeType) ? 'Delete photo?' : 'Delete document?',
-        report.title ? `"${report.title}" will be removed.` : 'This photo will be removed.',
+        report.title
+          ? `"${report.title}" will be removed.`
+          : 'This photo will be removed.',
         [
           { text: 'Cancel', style: 'cancel', onPress: session.end },
           {
@@ -118,7 +146,10 @@ export function ReportsScreen({ navigation }: ScreenProps<'Reports'>) {
                 await deleteReport(session.client, report);
                 load();
               } catch {
-                Alert.alert('Not deleted', 'Please check the internet connection and try again.');
+                Alert.alert(
+                  'Not deleted',
+                  'Please check the internet connection and try again.',
+                );
               } finally {
                 session.end();
               }
@@ -147,16 +178,26 @@ export function ReportsScreen({ navigation }: ScreenProps<'Reports'>) {
           <View style={styles.dateGroup}>
             <Text style={styles.date}>{formatLongDate(group.date)}</Text>
             {group.doctors.map(doctorGroup => {
-              const pdfs = doctorGroup.reports.filter(r => !isImage(r.mimeType));
-              const photos = doctorGroup.reports.filter(r => isImage(r.mimeType));
+              const pdfs = doctorGroup.reports.filter(
+                r => !isImage(r.mimeType),
+              );
+              const photos = doctorGroup.reports.filter(r =>
+                isImage(r.mimeType),
+              );
               return (
                 <View key={doctorGroup.doctorId} style={styles.doctorGroup}>
-                  <Text style={styles.doctorName}>{doctorGroup.doctorName}</Text>
+                  <Text style={styles.doctorName}>
+                    {doctorGroup.doctorName}
+                  </Text>
                   {pdfs.map(report => (
                     <Pressable
                       key={report.id}
                       onPress={() => openPdf(report)}
-                      style={({ pressed }) => [styles.report, pressed && styles.pressed]}>
+                      style={({ pressed }) => [
+                        styles.report,
+                        pressed && styles.pressed,
+                      ]}
+                    >
                       <View style={styles.pdfThumb}>
                         <Icon name="file" color={colors.primary} />
                         <Text style={styles.pdfLabel}>PDF</Text>
@@ -165,10 +206,23 @@ export function ReportsScreen({ navigation }: ScreenProps<'Reports'>) {
                         {report.title}
                       </Text>
                       <Pressable
+                        accessibilityLabel={`Download ${report.title}`}
+                        onPress={() => download(report)}
+                        hitSlop={10}
+                        style={styles.delete}
+                      >
+                        <Icon
+                          name="download"
+                          size={20}
+                          color={colors.primary}
+                        />
+                      </Pressable>
+                      <Pressable
                         accessibilityLabel={`Delete ${report.title}`}
                         onPress={() => confirmDelete(report)}
                         hitSlop={10}
-                        style={styles.delete}>
+                        style={styles.delete}
+                      >
                         <Icon name="trash" size={20} color={colors.textMuted} />
                       </Pressable>
                     </Pressable>
@@ -180,11 +234,17 @@ export function ReportsScreen({ navigation }: ScreenProps<'Reports'>) {
                           key={photo.id}
                           accessibilityLabel={`Open photo ${index + 1}`}
                           onPress={() => setViewer({ photos, index })}
-                          style={styles.photoTile}>
+                          style={styles.photoTile}
+                        >
                           {photoUrls[photo.id] ? (
-                            <Image source={{ uri: photoUrls[photo.id] }} style={styles.photo} />
+                            <Image
+                              source={{ uri: photoUrls[photo.id] }}
+                              style={styles.photo}
+                            />
                           ) : (
-                            <View style={[styles.photo, styles.photoPlaceholder]}>
+                            <View
+                              style={[styles.photo, styles.photoPlaceholder]}
+                            >
                               <Icon name="image" color={colors.textMuted} />
                             </View>
                           )}
@@ -192,7 +252,8 @@ export function ReportsScreen({ navigation }: ScreenProps<'Reports'>) {
                             accessibilityLabel={`Delete photo ${index + 1}`}
                             onPress={() => confirmDelete(photo)}
                             hitSlop={8}
-                            style={styles.photoDelete}>
+                            style={styles.photoDelete}
+                          >
                             <Icon name="trash" size={14} color={colors.white} />
                           </Pressable>
                         </Pressable>
@@ -206,7 +267,12 @@ export function ReportsScreen({ navigation }: ScreenProps<'Reports'>) {
         )}
       />
 
-      <PhotoViewer viewer={viewer} urls={photoUrls} onClose={() => setViewer(null)} />
+      <PhotoViewer
+        viewer={viewer}
+        urls={photoUrls}
+        onClose={() => setViewer(null)}
+        onDownload={download}
+      />
     </SafeAreaView>
   );
 }
@@ -216,53 +282,103 @@ function PhotoViewer({
   viewer,
   urls,
   onClose,
+  onDownload,
 }: {
   viewer: Viewer;
   urls: Record<string, string>;
   onClose: () => void;
+  onDownload: (report: Report, photoNumber?: number) => void;
 }) {
   const styles = useStyles();
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const [index, setIndex] = useState(0);
-  useEffect(() => setIndex(viewer?.index ?? 0), [viewer]);
+  const [pageHeight, setPageHeight] = useState(0);
+  // While a photo is zoomed in, dragging moves the photo instead of switching photos.
+  const [zoomed, setZoomed] = useState(false);
+  useEffect(() => {
+    setIndex(viewer?.index ?? 0);
+    setZoomed(false);
+  }, [viewer]);
 
   return (
     <Modal
       visible={viewer !== null}
       animationType="fade"
-      onRequestClose={onClose}>
-      <SafeAreaProvider>
-        <SafeAreaView style={styles.viewer}>
-          <View style={styles.viewerHeader}>
-            <Text style={styles.viewerTitle}>
-              {viewer && viewer.photos.length > 1
-                ? `Photo ${index + 1} of ${viewer.photos.length}`
-                : 'Photo'}
-            </Text>
-            <Pressable accessibilityLabel="Close" onPress={onClose} hitSlop={12}>
-              <Icon name="close" color={colors.white} size={28} />
-            </Pressable>
-          </View>
-          {viewer && (
-            <FlatList
-              data={viewer.photos}
-              keyExtractor={photo => String(photo.id)}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              initialScrollIndex={viewer.index}
-              getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
-              onMomentumScrollEnd={e =>
-                setIndex(Math.round(e.nativeEvent.contentOffset.x / width))
-              }
-              renderItem={({ item }) => (
-                <Image source={{ uri: urls[item.id] }} style={[styles.viewerImage, { width }]} />
+      onRequestClose={onClose}
+    >
+      {/* Gestures inside a Modal need their own root view on Android. */}
+      <GestureHandlerRootView style={styles.flex}>
+        <SafeAreaProvider>
+          <SafeAreaView style={styles.viewer}>
+            <View style={styles.viewerHeader}>
+              <Text style={styles.viewerTitle}>
+                {viewer && viewer.photos.length > 1
+                  ? `Photo ${index + 1} of ${viewer.photos.length}`
+                  : 'Photo'}
+              </Text>
+              {viewer && (
+                <Pressable
+                  accessibilityLabel="Download this photo"
+                  onPress={() =>
+                    onDownload(
+                      viewer.photos[index],
+                      viewer.photos.length > 1 ? index + 1 : undefined,
+                    )
+                  }
+                  hitSlop={12}
+                >
+                  <Icon name="download" color={colors.white} size={26} />
+                </Pressable>
               )}
-            />
-          )}
-        </SafeAreaView>
-      </SafeAreaProvider>
+              <Pressable
+                accessibilityLabel="Close"
+                onPress={onClose}
+                hitSlop={12}
+              >
+                <Icon name="close" color={colors.white} size={28} />
+              </Pressable>
+            </View>
+            <Text style={styles.viewerHint}>Pinch or double-tap to zoom</Text>
+            {viewer && (
+              <View
+                style={styles.flex}
+                onLayout={e => setPageHeight(e.nativeEvent.layout.height)}
+              >
+                <FlatList
+                  data={viewer.photos}
+                  keyExtractor={photo => String(photo.id)}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  scrollEnabled={!zoomed}
+                  initialScrollIndex={viewer.index}
+                  getItemLayout={(_, i) => ({
+                    length: width,
+                    offset: width * i,
+                    index: i,
+                  })}
+                  onMomentumScrollEnd={e =>
+                    setIndex(Math.round(e.nativeEvent.contentOffset.x / width))
+                  }
+                  renderItem={({ item }) =>
+                    urls[item.id] && pageHeight > 0 ? (
+                      <ZoomableImage
+                        uri={urls[item.id]}
+                        width={width}
+                        height={pageHeight}
+                        onZoomChange={setZoomed}
+                      />
+                    ) : (
+                      <View style={{ width, height: pageHeight }} />
+                    )
+                  }
+                />
+              </View>
+            )}
+          </SafeAreaView>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -274,9 +390,17 @@ const useStyles = makeStyles(colors =>
     safe: { flex: 1, backgroundColor: colors.background },
     list: { padding: spacing.md, paddingBottom: spacing.xl },
     headerAdd: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-    headerAddText: { color: colors.white, fontSize: font.body, fontWeight: '700' },
+    headerAddText: {
+      color: colors.white,
+      fontSize: font.body,
+      fontWeight: '700',
+    },
     empty: { alignItems: 'center', marginTop: spacing.xl, gap: spacing.md },
-    emptyText: { textAlign: 'center', fontSize: font.body, color: colors.textMuted },
+    emptyText: {
+      textAlign: 'center',
+      fontSize: font.body,
+      color: colors.textMuted,
+    },
     dateGroup: { marginBottom: spacing.lg },
     date: {
       fontSize: font.large,
@@ -350,7 +474,18 @@ const useStyles = makeStyles(colors =>
       padding: spacing.md,
       gap: spacing.md,
     },
-    viewerTitle: { flex: 1, color: colors.white, fontSize: font.body, fontWeight: '600' },
+    viewerTitle: {
+      flex: 1,
+      color: colors.white,
+      fontSize: font.body,
+      fontWeight: '600',
+    },
+    flex: { flex: 1 },
+    viewerHint: {
+      color: '#BBBBBB',
+      fontSize: font.small - 2,
+      textAlign: 'center',
+    },
     viewerImage: { height: '100%', resizeMode: 'contain' },
   }),
 );

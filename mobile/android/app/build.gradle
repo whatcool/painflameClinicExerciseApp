@@ -89,8 +89,8 @@ android {
         applicationId "com.painflame.therapies"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 2
-        versionName "1.1"
+        versionCode 3
+        versionName "1.2"
     }
     signingConfigs {
         release {
@@ -127,6 +127,14 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+
+    // Splash screen (Android 11+ via the AndroidX backport)
+    implementation("androidx.core:core-splashscreen:1.2.0")
+    // "Continue with Google" through Android's Credential Manager.
+    // googleid stays on 1.1.1: 1.2.x is built with Kotlin 2.4, newer than this project's 2.2.
+    implementation("androidx.credentials:credentials:1.6.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.6.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

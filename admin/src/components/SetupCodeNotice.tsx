@@ -13,8 +13,9 @@ export function SetupCodeNotice({
       <div className="muted">One-time code for {mobile}</div>
       <div className="code">{code}</div>
       <p>
-        Give this code to the patient. In the app they tap <strong>“Activate with clinic code”</strong>,
-        enter their mobile number, this code and a new 6-digit PIN.
+        Give this code to the patient. In the app they tap <strong>“Continue with Google”</strong>,
+        choose their Google account, then enter their mobile number and this code. They only do
+        this once; after that, choosing the same Google account logs them in.
       </p>
       <p className="muted">
         Valid until {new Date(expiresAt).toLocaleString()}. Write it down now: it is not shown again.

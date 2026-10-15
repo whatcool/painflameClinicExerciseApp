@@ -1,79 +1,62 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Button } from '../../components/Button';
+import { StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { BusyOverlay } from '../../components/BusyOverlay';
+import { ExitConfirm } from '../../components/ExitConfirm';
+import { GoogleButton } from '../../components/GoogleButton';
 import { Logo } from '../../components/Logo';
 import { Screen } from '../../components/Screen';
-import { TextField } from '../../components/TextField';
-import { isSupabaseConfigured } from '../../config/supabase';
+import { isGoogleConfigured, isSupabaseConfigured } from '../../config/supabase';
 import { authErrorMessage, useAuth } from '../../context/AuthContext';
-import type { ScreenProps } from '../../navigation/types';
-import { PIN_LENGTH } from '../../security/pin';
-import { font, spacing } from '../../theme';
+import { font, radius, spacing } from '../../theme';
 import { makeStyles } from '../../theme/ThemeContext';
-import { digitsOnly } from '../../utils/validation';
 
-export function LoginScreen({ navigation }: ScreenProps<'Login'>) {
+export function LoginScreen() {
   const styles = useStyles();
-  const { login } = useAuth();
-  const [mobile, setMobile] = useState('');
-  const [pin, setPin] = useState('');
+  const { signInWithGoogle } = useAuth();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   const submit = async () => {
-    if (mobile.length !== 10 || pin.length !== PIN_LENGTH) {
-      setError(`Enter your 10-digit mobile number and ${PIN_LENGTH}-digit PIN`);
-      return;
-    }
     setBusy(true);
     setError('');
-    const result = await login(mobile, pin);
+    const result = await signInWithGoogle();
     setBusy(false);
     if (!result.ok) {
-      setError(authErrorMessage(result));
-      setPin('');
+      setError(authErrorMessage(result) ?? '');
     }
   };
 
   return (
     <Screen edges={['top', 'bottom']} contentStyle={styles.content}>
-      <Logo width={260} />
-      <Text style={styles.title}>Welcome</Text>
-      <Text style={styles.subtitle}>Log in to see your exercises</Text>
-      {!isSupabaseConfigured() && (
+      <ExitConfirm />
+      <BusyOverlay visible={busy} message="Signing you in…" />
+      <Animated.View entering={FadeInDown.duration(500)}>
+        <Logo width={260} />
+      </Animated.View>
+      <Animated.View entering={FadeInDown.delay(120).duration(500)}>
+        <Text style={styles.title}>Welcome</Text>
+        <Text style={styles.subtitle}>Sign in to see your exercises</Text>
+      </Animated.View>
+
+      {(!isSupabaseConfigured() || !isGoogleConfigured()) && (
         <Text style={styles.error}>
-          The app is not connected to the server yet. Fill in src/config/supabase.ts.
+          The app is not fully set up yet: fill in src/config/supabase.ts.
         </Text>
       )}
 
-      <TextField
-        label="Mobile number"
-        value={mobile}
-        onChangeText={text => setMobile(digitsOnly(text, 10))}
-        keyboardType="number-pad"
-        placeholder="10-digit mobile number"
-        maxLength={10}
-      />
-      <TextField
-        label="PIN"
-        value={pin}
-        onChangeText={text => setPin(digitsOnly(text, PIN_LENGTH))}
-        keyboardType="number-pad"
-        secureTextEntry
-        placeholder={`${PIN_LENGTH}-digit PIN`}
-        maxLength={PIN_LENGTH}
-        onSubmitEditing={submit}
-      />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      <Animated.View entering={FadeInDown.delay(240).duration(500)}>
+        <GoogleButton onPress={submit} loading={busy} />
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Button title="Log in" onPress={submit} loading={busy} />
-
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>First time, or forgot PIN?</Text>
-        <Pressable onPress={() => navigation.navigate('Activate')} hitSlop={10}>
-          <Text style={styles.link}>Activate with clinic code</Text>
-        </Pressable>
-      </View>
+        <View style={styles.info}>
+          <Text style={styles.infoTitle}>First time here?</Text>
+          <Text style={styles.infoText}>
+            After choosing your Google account, enter your mobile number and the 8-digit code
+            from Painflame Clinic. You only do this once.
+          </Text>
+        </View>
+      </Animated.View>
     </Screen>
   );
 }
@@ -87,19 +70,15 @@ const useStyles = makeStyles(colors =>
       color: colors.primary,
       marginTop: spacing.lg,
     },
-    subtitle: { fontSize: font.body, color: colors.textMuted, marginBottom: spacing.lg },
-    error: { color: colors.danger, fontSize: font.body, marginBottom: spacing.md },
-    // Wraps onto two lines on narrow phones instead of running off the screen.
-    footer: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginTop: spacing.lg,
-      columnGap: spacing.sm,
-      rowGap: spacing.xs,
+    subtitle: { fontSize: font.body, color: colors.textMuted, marginBottom: spacing.xl },
+    error: { color: colors.danger, fontSize: font.body, marginTop: spacing.md },
+    info: {
+      marginTop: spacing.xl,
+      padding: spacing.md,
+      borderRadius: radius.md,
+      backgroundColor: colors.primaryLight,
     },
-    footerText: { fontSize: font.body, color: colors.textMuted },
-    link: { fontSize: font.body, color: colors.primary, fontWeight: '700' },
+    infoTitle: { fontSize: font.body, fontWeight: '700', color: colors.text },
+    infoText: { fontSize: font.small, color: colors.textMuted, marginTop: spacing.xs, lineHeight: 21 },
   }),
 );

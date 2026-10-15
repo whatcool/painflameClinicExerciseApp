@@ -7,6 +7,7 @@ import ReorderableList, {
 } from 'react-native-reorderable-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AddExerciseModal } from '../../components/AddExerciseModal';
+import { BusyOverlay } from '../../components/BusyOverlay';
 import { Button } from '../../components/Button';
 import { ExerciseThumb } from '../../components/ExerciseThumb';
 import { Icon } from '../../components/Icon';
@@ -179,6 +180,7 @@ export function ExerciseListScreen({ navigation, route }: ScreenProps<'ExerciseL
 
     return (
       <SafeAreaView style={styles.safe} edges={['bottom']}>
+        <BusyOverlay visible={saving} message="Saving the exercise list…" />
         <View style={styles.permission}>
           <View style={styles.flex}>
             <Text style={styles.permissionTitle}>Patient can edit this list</Text>

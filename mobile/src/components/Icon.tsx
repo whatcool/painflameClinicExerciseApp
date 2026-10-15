@@ -26,7 +26,8 @@ export type IconName =
   | 'mic'
   | 'skip'
   | 'stop'
-  | 'play';
+  | 'play'
+  | 'download';
 
 type Props = { name: IconName; size?: number; color?: string; strokeWidth?: number };
 
@@ -176,6 +177,14 @@ function renderIcon(name: IconName, s: object) {
       return <Rect x={5} y={5} width={14} height={14} rx={2} {...s} />;
     case 'play':
       return <Polyline points="6 3 20 12 6 21 6 3" {...s} />;
+    case 'download':
+      return (
+        <>
+          <Path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" {...s} />
+          <Polyline points="7 10 12 15 17 10" {...s} />
+          <Line x1={12} y1={15} x2={12} y2={3} {...s} />
+        </>
+      );
     case 'flame':
       return (
         <Path

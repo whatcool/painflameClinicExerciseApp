@@ -97,6 +97,56 @@ click **Run**), in date order. The migrations so far:
 |---|---|
 | `20261011000000_init.sql` | Everything (initial setup) |
 | `20261012000000_exercise_description.sql` | “Instructions for the patient” text on each exercise |
+| `20261015000000_google_login.sql` | Google sign-in for patients (app 1.2) |
 
 If an Edge Function in `supabase/functions/` changed, redeploy it with
 `npx supabase functions deploy <name>`.
+
+## Google sign-in (app 1.2)
+
+Patients sign in with their Google account. The first time, the app asks for their mobile number
+and the 8-digit code from the clinic, which links that Google account to their record. Google
+sign-in is free. Do these steps once, in order.
+
+### A. Google Cloud (about 15 minutes)
+
+1. Open https://console.cloud.google.com, create a project called **Painflame**.
+2. **APIs & Services → OAuth consent screen**: user type **External**, app name
+   *Painflame Clinic Exercise*, your support e-mail, then publish the app (**In production**).
+   The scopes needed are only the default *email*, *profile* and *openid*.
+3. **APIs & Services → Credentials → Create credentials → OAuth client ID**, three times:
+
+   | Type | Name | Package name | SHA-1 certificate fingerprint |
+   |---|---|---|---|
+   | Web application | Painflame Supabase | – | – |
+   | Android | Painflame release | `com.painflame.therapies` | `23:B2:CA:61:7E:6F:30:35:46:87:C1:37:ED:0D:A6:4F:AA:AD:B4:40` |
+   | Android | Painflame debug | `com.painflame.therapies.debug` | `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25` |
+
+   For the Web application client, add the redirect URI
+   `https://YOUR-PROJECT-REF.supabase.co/auth/v1/callback`.
+   Keep the Web client's **Client ID** and **Client secret**: you need them below.
+   The Android clients have nothing to copy; they only tell Google that the app is genuine.
+
+### B. Supabase
+
+1. **Authentication → Sign In / Providers → Google**: enable it, paste the Web **Client ID** and
+   **Client secret**. Leave **Skip nonce checks** turned off (the app sends a nonce).
+2. **Authentication → Sign In / Providers**: turn **on** “Allow new users to sign up”.
+   Google sign-in needs this to create the account the first time. It is safe: a new account sees
+   nothing until it is linked to a patient with the clinic's code.
+3. SQL Editor: run `supabase/migrations/20261015000000_google_login.sql`.
+4. Deploy the new function:
+   `npx supabase functions deploy link-google`
+
+### C. The app
+
+In `mobile/src/config/supabase.ts` set `GOOGLE_WEB_CLIENT_ID` to the **Web** client ID
+(it ends with `.apps.googleusercontent.com`).
+
+### Notes
+
+- Patients using app 1.1 (PIN) keep working until they update. After updating to 1.2 they
+  tap *Continue with Google* once and link with a new code from the admin panel.
+- New phone, or a different Google account: in the admin panel open the patient →
+  **New phone / Google account: create new code**.
+- If you ever create a new release keystore, add its SHA-1 as another Android client.

@@ -35,21 +35,18 @@ beforeEach(() => {
 });
 
 describe('waitForGo', () => {
-  it('listens in 10-second windows and starts when "Go" is heard', async () => {
-    mockListen
-      .mockResolvedValueOnce('timeout')
-      .mockResolvedValueOnce('timeout')
-      .mockResolvedValueOnce('matched');
+  it('listens for one 30-second window and starts when "Go" is heard', async () => {
+    mockListen.mockResolvedValueOnce('matched');
     const h = handlers();
     const result = await waitForGo(new AbortController().signal, never, true, h);
     expect(result).toBe('voice');
-    expect(mockListen).toHaveBeenCalledTimes(3);
+    expect(mockListen).toHaveBeenCalledTimes(1);
     expect(mockListen).toHaveBeenCalledWith(GO_WORDS, LISTEN_WINDOW_MS);
-    expect(LISTEN_WINDOW_MS).toBe(10000);
+    expect(LISTEN_WINDOW_MS).toBe(30000);
     expect(h.onNoSpeech).not.toHaveBeenCalled();
   });
 
-  it('stops after 3 empty windows, announces it, then waits for a tap', async () => {
+  it('after 30 seconds without speech, announces it, then waits for a tap', async () => {
     mockListen.mockResolvedValue('timeout');
     let tap!: () => void;
     const tapped = new Promise<void>(resolve => {
@@ -59,19 +56,19 @@ describe('waitForGo', () => {
     const waiting = waitForGo(new AbortController().signal, tapped, true, h);
     await new Promise<void>(r => setTimeout(r, 0));
     expect(mockListen).toHaveBeenCalledTimes(MAX_LISTEN_WINDOWS);
-    expect(MAX_LISTEN_WINDOWS).toBe(3);
+    expect(MAX_LISTEN_WINDOWS).toBe(1);
     expect(h.onNoSpeech).toHaveBeenCalledTimes(1);
     tap();
     await expect(waiting).resolves.toBe('no-speech');
-    expect(mockListen).toHaveBeenCalledTimes(3); // no 4th window
+    expect(mockListen).toHaveBeenCalledTimes(1); // no second window
   });
 
-  it('counts recogniser errors (e.g. app in background) as used-up windows', async () => {
+  it('treats recogniser errors (e.g. app in background) like no speech', async () => {
     mockListen.mockResolvedValue('error');
     const h = handlers();
     const waiting = waitForGo(new AbortController().signal, Promise.resolve(), true, h);
     await expect(waiting).resolves.toBe('no-speech');
-    expect(mockListen).toHaveBeenCalledTimes(3);
+    expect(mockListen).toHaveBeenCalledTimes(1);
     expect(h.onNoSpeech).toHaveBeenCalledTimes(1);
     expect(h.onVoiceUnavailable).not.toHaveBeenCalled();
   });

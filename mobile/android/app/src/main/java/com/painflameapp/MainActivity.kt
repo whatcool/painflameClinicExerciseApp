@@ -1,6 +1,7 @@
 package com.painflameapp
 
 import android.os.Bundle
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
@@ -10,6 +11,8 @@ class MainActivity : ReactActivity() {
 
   // Required by react-native-screens: don't restore fragments after the process was killed.
   override fun onCreate(savedInstanceState: Bundle?) {
+    // Shows the Painflame splash until the first frame (must come before super.onCreate).
+    installSplashScreen()
     super.onCreate(null)
   }
 

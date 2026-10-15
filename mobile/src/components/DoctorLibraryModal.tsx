@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   FlatList,
   Modal,
@@ -19,6 +18,8 @@ import { font, radius, spacing } from '../theme';
 import { makeStyles, useTheme } from '../theme/ThemeContext';
 import { formatMonthYear } from '../utils/date';
 import { Avatar } from './Avatar';
+import { BusyOverlay } from './BusyOverlay';
+import { ExerciseDoodle } from './ExerciseDoodle';
 import { Button } from './Button';
 import { Icon } from './Icon';
 import { MonthYearField } from './MonthYearField';
@@ -111,7 +112,7 @@ export function DoctorLibraryModal({ visible, title, selectedId, clinic, onSelec
               }
               ListEmptyComponent={
                 loading ? (
-                  <ActivityIndicator color={colors.primary} />
+                  <ExerciseDoodle size={100} message="Loading doctors…" tips={false} />
                 ) : (
                   <Text style={styles.empty}>No doctors yet. Add the first one.</Text>
                 )
@@ -211,6 +212,7 @@ function DoctorForm({
 
   return (
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.list}>
+      <BusyOverlay visible={saving} message="Saving the doctor…" />
       <Pressable onPress={choosePhoto} style={styles.photo}>
         <Avatar uri={photoUri} size={110} />
         <Text style={styles.photoText}>{photoUri ? 'Change photo' : 'Add photo'}</Text>

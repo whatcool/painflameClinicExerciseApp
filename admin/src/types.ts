@@ -12,6 +12,8 @@ export type Patient = {
   counttill_tour_done: boolean;
   consent_at: string | null;
   activated_at: string | null;
+  google_email: string | null; // Google account linked in app 1.2+
+  google_user_id: string | null;
   created_at: string;
 };
 

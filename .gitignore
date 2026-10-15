@@ -1,2 +1,5 @@
 # IDE settings (Android Studio / IntelliJ)
 .idea/
+
+# Supabase CLI local cache (project link, CLI version)
+supabase/.temp/

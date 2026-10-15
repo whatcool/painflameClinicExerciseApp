@@ -13,8 +13,9 @@ export const GO_WORDS = [
   'शुरू',
 ];
 
-// The microphone listens in 10-second windows, starting a new window until "Go" is heard.
-export const LISTEN_WINDOW_MS = 10_000;
+// The microphone listens for one 30-second window. Android's recogniser stops on silence after
+// a few seconds, so the native side quietly restarts it until the 30 seconds are up.
+export const LISTEN_WINDOW_MS = 30_000;
 
 /** Thrown when a step is interrupted by Skip or End. */
 export class Interrupted extends Error {}
@@ -77,7 +78,7 @@ export function sleep(ms: number, signal: AbortSignal) {
 
 // After this many empty windows the app stops listening and asks for a tap instead.
 // This also covers the patient leaving the app, where Android may block the microphone.
-export const MAX_LISTEN_WINDOWS = 3;
+export const MAX_LISTEN_WINDOWS = 1;
 
 export type ListenOutcome = 'voice' | 'tap' | 'no-speech' | 'voice-unavailable';
 
@@ -90,7 +91,7 @@ type WaitHandlers = {
 
 /**
  * Waits until the patient says "Go"/"Start"/"Chalo"/"Shuru" or taps the screen.
- * Listens in up to 3 windows of 10 seconds; if nothing is heard, calls onNoSpeech
+ * Listens for 30 seconds; if nothing is heard, calls onNoSpeech
  * and then waits for a tap only.
  */
 export async function waitForGo(

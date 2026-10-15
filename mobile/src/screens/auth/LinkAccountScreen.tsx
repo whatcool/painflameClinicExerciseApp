@@ -1,34 +1,44 @@
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { BusyOverlay } from '../../components/BusyOverlay';
 import { Button } from '../../components/Button';
 import { Icon } from '../../components/Icon';
 import { Screen } from '../../components/Screen';
 import { TextField } from '../../components/TextField';
 import { authErrorMessage, useAuth } from '../../context/AuthContext';
-import { isValidPin, PIN_LENGTH } from '../../security/pin';
 import { font, radius, spacing } from '../../theme';
 import { makeStyles, useTheme } from '../../theme/ThemeContext';
 import { digitsOnly, isValidMobile } from '../../utils/validation';
 
 const CODE_LENGTH = 8;
 
-type Errors = Partial<Record<'mobile' | 'code' | 'pin' | 'confirmPin' | 'consent' | 'form', string>>;
+type Errors = Partial<Record<'mobile' | 'code' | 'consent' | 'form', string>>;
 
 /**
- * First-time activation and PIN reset: the clinic creates the account and gives the
- * patient a one-time code; the patient chooses their PIN here.
+ * Shown once, after the first Google sign-in: the patient enters their mobile number and the
+ * one-time code from the clinic, which links this Google account to their record.
  */
-export function ActivateScreen() {
+export function LinkAccountScreen() {
   const styles = useStyles();
   const { colors } = useTheme();
-  const { activate } = useAuth();
+  const { googleEmail, linkAccount, logout } = useAuth();
   const [mobile, setMobile] = useState('');
   const [code, setCode] = useState('');
-  const [pin, setPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
   const [consent, setConsent] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [busy, setBusy] = useState(false);
+
+  // Back = choose a different Google account.
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        logout();
+        return true;
+      });
+      return () => sub.remove();
+    }, [logout]),
+  );
 
   const submit = async () => {
     const next: Errors = {};
@@ -38,12 +48,6 @@ export function ActivateScreen() {
     if (code.length !== CODE_LENGTH) {
       next.code = `Enter the ${CODE_LENGTH}-digit code from the clinic`;
     }
-    if (!isValidPin(pin)) {
-      next.pin = `PIN must be exactly ${PIN_LENGTH} digits`;
-    }
-    if (confirmPin !== pin) {
-      next.confirmPin = 'PINs do not match';
-    }
     if (!consent) {
       next.consent = 'Please agree to continue';
     }
@@ -52,19 +56,23 @@ export function ActivateScreen() {
       return;
     }
     setBusy(true);
-    const result = await activate(mobile, code, pin);
+    const result = await linkAccount(mobile, code);
     setBusy(false);
     if (!result.ok) {
-      setErrors({ form: authErrorMessage(result) });
+      setErrors({ form: authErrorMessage(result) ?? undefined });
     }
   };
 
   return (
-    <Screen>
+    <Screen edges={['top', 'bottom']} contentStyle={styles.content}>
+      <BusyOverlay visible={busy} message="Linking your account…" />
+      <Text style={styles.title}>Link your account</Text>
       <Text style={styles.intro}>
-        Enter the code the clinic gave you and choose a {PIN_LENGTH}-digit PIN. If you forgot
-        your PIN, ask the clinic for a new code and do the same.
+        Signed in as <Text style={styles.email}>{googleEmail ?? 'your Google account'}</Text>.
+        Enter your mobile number and the code Painflame Clinic gave you. You only need to do this
+        once.
       </Text>
+
       <TextField
         label="Mobile number"
         value={mobile}
@@ -81,33 +89,15 @@ export function ActivateScreen() {
         maxLength={CODE_LENGTH}
         error={errors.code}
       />
-      <TextField
-        label={`Choose a ${PIN_LENGTH}-digit PIN`}
-        value={pin}
-        onChangeText={text => setPin(digitsOnly(text, PIN_LENGTH))}
-        keyboardType="number-pad"
-        secureTextEntry
-        maxLength={PIN_LENGTH}
-        error={errors.pin}
-      />
-      <TextField
-        label="Confirm PIN"
-        value={confirmPin}
-        onChangeText={text => setConfirmPin(digitsOnly(text, PIN_LENGTH))}
-        keyboardType="number-pad"
-        secureTextEntry
-        maxLength={PIN_LENGTH}
-        error={errors.confirmPin}
-      />
 
       <View style={styles.notice}>
         <Text style={styles.noticeTitle}>Your data and privacy</Text>
         <Text style={styles.noticeText}>
-          Painflame Clinic stores your name, mobile number, gender, date of birth, exercise
-          list, exercise history and the reports the clinic adds, so your therapists can guide
-          your treatment. It is kept securely, is only seen by you and the clinic, and is not
-          shared with anyone else. You can ask the clinic to delete your account and data at any
-          time.
+          Painflame Clinic stores your name, mobile number, gender, date of birth, Google account
+          e-mail, exercise list, exercise history and the reports the clinic adds, so your
+          therapists can guide your treatment. It is kept securely, is only seen by you and the
+          clinic, and is not shared with anyone else. You can ask the clinic to delete your
+          account and data at any time.
         </Text>
         <Pressable
           accessibilityRole="checkbox"
@@ -123,14 +113,26 @@ export function ActivateScreen() {
       </View>
 
       {errors.form ? <Text style={styles.formError}>{errors.form}</Text> : null}
-      <Button title="Activate and log in" onPress={submit} loading={busy} />
+      <Button title="Link and continue" onPress={submit} loading={busy} />
+      <Pressable onPress={logout} hitSlop={10} style={styles.switch}>
+        <Text style={styles.switchText}>Use a different Google account</Text>
+      </Pressable>
     </Screen>
   );
 }
 
 const useStyles = makeStyles(colors =>
   StyleSheet.create({
-    intro: { fontSize: font.body, color: colors.textMuted, marginBottom: spacing.lg },
+    content: { paddingTop: spacing.xl },
+    title: { fontSize: font.title, fontWeight: '800', color: colors.primary },
+    intro: {
+      fontSize: font.body,
+      color: colors.textMuted,
+      marginTop: spacing.sm,
+      marginBottom: spacing.lg,
+      lineHeight: 25,
+    },
+    email: { color: colors.text, fontWeight: '700' },
     notice: {
       backgroundColor: colors.surface,
       borderRadius: radius.md,
@@ -165,5 +167,7 @@ const useStyles = makeStyles(colors =>
     consentText: { flex: 1, fontSize: font.body, color: colors.text },
     error: { color: colors.danger, fontSize: font.small, marginTop: spacing.xs },
     formError: { color: colors.danger, fontSize: font.body, marginBottom: spacing.md },
+    switch: { marginTop: spacing.lg, alignItems: 'center' },
+    switchText: { color: colors.primary, fontSize: font.body },
   }),
 );

@@ -94,8 +94,12 @@ export function Patients() {
                 <td>{p.mobile}</td>
                 <td>{p.doctor_id ? doctorName[p.doctor_id] ?? '—' : <span className="muted">—</span>}</td>
                 <td>
-                  {p.activated_at ? (
-                    <span className="badge green">Active</span>
+                  {p.google_email ? (
+                    <span className="badge green" title={p.google_email}>
+                      Google linked
+                    </span>
+                  ) : p.activated_at ? (
+                    <span className="badge green">Active (PIN)</span>
                   ) : (
                     <span className="badge orange">Waiting for code</span>
                   )}

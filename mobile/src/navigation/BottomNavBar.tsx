@@ -8,7 +8,11 @@ import { makeStyles, useTheme } from '../theme/ThemeContext';
 import { navigationRef } from './navigationRef';
 import type { RootStackParamList } from './types';
 
-type Tab = { label: string; icon: IconName; screen: 'Dashboard' | 'Profile' | 'Reports' };
+type Tab = {
+  label: string;
+  icon: IconName;
+  screen: 'Dashboard' | 'Profile' | 'Reports';
+};
 
 const TABS: Tab[] = [
   { label: 'Home', icon: 'home', screen: 'Dashboard' },
@@ -17,15 +21,16 @@ const TABS: Tab[] = [
 ];
 
 // Which tab is highlighted for each screen.
-const TAB_FOR_SCREEN: Partial<Record<keyof RootStackParamList, Tab['screen']>> = {
-  Dashboard: 'Dashboard',
-  Tracking: 'Dashboard',
-  ExerciseList: 'Dashboard',
-  Profile: 'Profile',
-  Reports: 'Reports',
-  AddReport: 'Reports',
-  SessionComplete: 'Dashboard',
-};
+const TAB_FOR_SCREEN: Partial<Record<keyof RootStackParamList, Tab['screen']>> =
+  {
+    Dashboard: 'Dashboard',
+    Tracking: 'Dashboard',
+    ExerciseList: 'Dashboard',
+    Profile: 'Profile',
+    Reports: 'Reports',
+    AddReport: 'Reports',
+    SessionComplete: 'Dashboard',
+  };
 
 function goTo(screen: Tab['screen']) {
   if (!navigationRef.isReady()) {
@@ -51,7 +56,11 @@ function goTo(screen: Tab['screen']) {
 }
 
 /** Bottom navigation shown on every page after login. */
-export function BottomNavBar({ currentScreen }: { currentScreen: keyof RootStackParamList | undefined }) {
+export function BottomNavBar({
+  currentScreen,
+}: {
+  currentScreen: keyof RootStackParamList | undefined;
+}) {
   const styles = useStyles();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -59,8 +68,12 @@ export function BottomNavBar({ currentScreen }: { currentScreen: keyof RootStack
 
   // Hide while typing so it doesn't sit on top of the keyboard.
   useEffect(() => {
-    const show = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
-    const hide = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
+    const show = Keyboard.addListener('keyboardDidShow', () =>
+      setKeyboardOpen(true),
+    );
+    const hide = Keyboard.addListener('keyboardDidHide', () =>
+      setKeyboardOpen(false),
+    );
     return () => {
       show.remove();
       hide.remove();
@@ -74,44 +87,79 @@ export function BottomNavBar({ currentScreen }: { currentScreen: keyof RootStack
   const activeTab = currentScreen ? TAB_FOR_SCREEN[currentScreen] : 'Dashboard';
 
   return (
-    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
-      {TABS.map(tab => {
-        const active = tab.screen === activeTab;
-        const color = active ? colors.primary : colors.textMuted;
-        return (
-          <Pressable
-            key={tab.screen}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={tab.label}
-            onPress={() => {
-              if (currentScreen !== tab.screen) {
-                goTo(tab.screen);
-              }
-            }}
-            style={styles.tab}>
-            <View style={[styles.iconWrap, active && styles.iconWrapActive]}>
-              <Icon name={tab.icon} size={24} color={color} strokeWidth={active ? 2.5 : 2} />
-            </View>
-            <Text style={[styles.label, { color }, active && styles.labelActive]}>{tab.label}</Text>
-          </Pressable>
-        );
-      })}
+    // A rounded "pill" floating above the page background, with a gap around it.
+    <View
+      style={[
+        styles.dock,
+        { paddingBottom: Math.max(insets.bottom, spacing.sm) },
+      ]}
+    >
+      <View style={styles.bar}>
+        {TABS.map(tab => {
+          const active = tab.screen === activeTab;
+          const color = active ? colors.primary : colors.textMuted;
+          return (
+            <Pressable
+              key={tab.screen}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: active }}
+              accessibilityLabel={tab.label}
+              onPress={() => {
+                if (currentScreen !== tab.screen) {
+                  goTo(tab.screen);
+                }
+              }}
+              style={styles.tab}
+            >
+              <View style={[styles.iconWrap, active && styles.iconWrapActive]}>
+                <Icon
+                  name={tab.icon}
+                  size={24}
+                  color={color}
+                  strokeWidth={active ? 2.5 : 2}
+                />
+              </View>
+              <Text
+                style={[styles.label, { color }, active && styles.labelActive]}
+              >
+                {tab.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 const useStyles = makeStyles(colors =>
   StyleSheet.create({
+    dock: {
+      backgroundColor: colors.background,
+      paddingHorizontal: spacing.md,
+      paddingTop: spacing.xs,
+    },
     bar: {
       flexDirection: 'row',
       backgroundColor: colors.surface,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-      paddingTop: spacing.xs,
+      borderRadius: 28,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: spacing.xs,
+      paddingHorizontal: spacing.xs,
+      // Floating shadow
+      elevation: 10,
+      shadowColor: '#000000',
+      shadowOpacity: 0.15,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
     },
-    tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.xs },
-    iconWrap: { paddingHorizontal: spacing.md + 4, paddingVertical: 4, borderRadius: 16 },
+    tab: { flex: 1, alignItems: 'center', paddingVertical: 2 },
+    iconWrap: {
+      paddingHorizontal: spacing.md + 4,
+      paddingVertical: 4,
+      borderRadius: 16,
+    },
     iconWrapActive: { backgroundColor: colors.primaryLight },
     label: { fontSize: font.small - 1, marginTop: 2 },
     labelActive: { fontWeight: '700' },
